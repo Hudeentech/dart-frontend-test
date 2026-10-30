@@ -932,6 +932,7 @@ export default function Home({
                     key={draft.id}
                     onDelete={() => promptDeleteDraft(draft)}
                     deleteLabel="Delete"
+                    bgClass="bg-gray-50 dark:bg-[#1c1c20]"
                   >
                     <div
                       onClick={() => handleResumeDraft(draft)}

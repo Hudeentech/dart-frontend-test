@@ -179,9 +179,11 @@ export default function SavedAddress({ onBack }: SavedAddressProps) {
               key={hub.id}
               onDelete={() => promptDeleteHub(hub)}
               deleteLabel="Delete"
+              roundedClass="rounded-none"
+              bgClass="bg-white dark:bg-[#1c1c20]"
             >
               <div
-                className="p-4 sm:p-5 flex items-center justify-between hover:bg-gray-50/80 dark:hover:bg-white/[0.03] transition-colors relative"
+                className="p-4 sm:p-5 flex items-center justify-between bg-white dark:bg-[#1c1c20] hover:bg-gray-50/80 dark:hover:bg-[#232328] transition-colors relative"
               >
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-full bg-gray-50 dark:bg-white/5 flex items-center justify-center text-gray-600 dark:text-gray-300 shrink-0 border border-gray-100 dark:border-white/10">

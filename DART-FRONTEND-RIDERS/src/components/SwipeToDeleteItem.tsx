@@ -7,6 +7,8 @@ interface SwipeToDeleteItemProps {
   disabled?: boolean
   className?: string
   deleteLabel?: string
+  roundedClass?: string
+  bgClass?: string
 }
 
 export default function SwipeToDeleteItem({
@@ -15,6 +17,8 @@ export default function SwipeToDeleteItem({
   disabled = false,
   className = "",
   deleteLabel = "Delete",
+  roundedClass = "rounded-2xl",
+  bgClass = "bg-white dark:bg-[#1c1c20]",
 }: SwipeToDeleteItemProps) {
   const [offsetX, setOffsetX] = useState(0)
   const [isOpen, setIsOpen] = useState(false)
@@ -50,10 +54,13 @@ export default function SwipeToDeleteItem({
 
     if (!isHorizontalScroll.current) return
 
+    // Swipe left logic
     if (isOpen) {
+      // already open at -BUTTON_WIDTH
       const newOffset = Math.min(0, Math.max(-BUTTON_WIDTH, -BUTTON_WIDTH + deltaX))
       setOffsetX(newOffset)
     } else {
+      // closed at 0
       if (deltaX < 0) {
         const newOffset = Math.max(-BUTTON_WIDTH, deltaX)
         setOffsetX(newOffset)
@@ -67,6 +74,7 @@ export default function SwipeToDeleteItem({
 
     if (isOpen) {
       if (offsetX > -BUTTON_WIDTH / 2) {
+        // user pushed it back to close
         setOffsetX(0)
         setIsOpen(false)
       } else {
@@ -75,6 +83,7 @@ export default function SwipeToDeleteItem({
       }
     } else {
       if (offsetX < -BUTTON_WIDTH / 2.5) {
+        // user dragged past threshold to open
         setOffsetX(-BUTTON_WIDTH)
         setIsOpen(true)
       } else {
@@ -100,7 +109,7 @@ export default function SwipeToDeleteItem({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl select-none ${className}`}
+      className={`relative overflow-hidden ${roundedClass} select-none bg-red-600 ${className}`}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -109,11 +118,12 @@ export default function SwipeToDeleteItem({
       onMouseUp={handleTouchEnd}
       onClick={handleRowClick}
     >
-      <div className="absolute inset-y-0 right-0 w-[76px] bg-red-500 hover:bg-red-600 active:bg-red-700 text-white flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors z-0">
+      {/* Background revealed on left swipe - solid red-600 across entire container */}
+      <div className="absolute inset-0 bg-red-600 flex items-center justify-end z-0">
         <button
           type="button"
           onClick={handleActionClick}
-          className="w-full h-full flex flex-col items-center justify-center gap-1 text-white cursor-pointer active:scale-95 transition-transform"
+          className="w-[76px] h-full flex flex-col items-center justify-center gap-1 text-white bg-red-600 hover:bg-red-700 active:bg-red-800 transition-colors cursor-pointer active:scale-95"
           title={deleteLabel}
           aria-label={deleteLabel}
         >
@@ -122,8 +132,9 @@ export default function SwipeToDeleteItem({
         </button>
       </div>
 
+      {/* Foreground Content Card - 100% SOLID OPAQUE, NEVER TRANSPARENT */}
       <div
-        className="relative z-10 w-full transition-transform ease-out"
+        className={`relative z-10 w-full ${bgClass} ${roundedClass} transition-transform ease-out`}
         style={{
           transform: `translateX(${offsetX}px)`,
           transitionDuration: isDragging.current ? "0ms" : "220ms",

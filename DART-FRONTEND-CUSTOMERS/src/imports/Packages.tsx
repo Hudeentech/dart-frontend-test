@@ -836,6 +836,7 @@ export default function Packages({
                       disabled={isSelectMode}
                       onDelete={() => promptDeleteDraft(draft)}
                       deleteLabel="Delete"
+                      bgClass="bg-gray-50 dark:bg-[#1c1c20]"
                     >
                       <div
                         onClick={() => {
@@ -1148,6 +1149,7 @@ export default function Packages({
                       disabled={isSelectMode}
                       onDelete={() => promptDeletePackage(item)}
                       deleteLabel="Delete"
+                      bgClass="bg-white dark:bg-[#1c1c20]"
                     >
                       {rowContent}
                     </SwipeToDeleteItem>

@@ -345,9 +345,11 @@ export default function SavedAddress({ onBack }: SavedAddressProps) {
                   key={addr.id}
                   onDelete={() => promptDeleteAddress(addr.id, addr.label)}
                   deleteLabel="Delete"
+                  roundedClass="rounded-none"
+                  bgClass="bg-white dark:bg-[#1c1c20]"
                 >
                   <div
-                    className="p-4 sm:p-5 flex items-center justify-between hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors relative"
+                    className="p-4 sm:p-5 flex items-center justify-between bg-white dark:bg-[#1c1c20] hover:bg-gray-50/80 dark:hover:bg-[#232328] transition-colors relative"
                   >
                     <div className="flex items-center gap-3.5 sm:gap-4 min-w-0 pr-2">
                       {/* Icon */}

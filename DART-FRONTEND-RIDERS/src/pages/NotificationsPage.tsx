@@ -350,13 +350,14 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
                         key={item.id}
                         onDelete={() => promptDeleteSingle(item.id, item.title)}
                         deleteLabel="Delete"
+                        bgClass={!item.isRead ? "bg-[#fffbeb] dark:bg-[#252219]" : "bg-white dark:bg-[#1c1c20]"}
                       >
                         <div
                           onClick={() => !item.isRead && handleMarkAsRead(item.id)}
                           className={`group relative flex gap-3 p-3.5 rounded-2xl transition-all border cursor-pointer ${
                             !item.isRead
-                              ? "bg-yellow-50/70 dark:bg-yellow-400/10 border-yellow-200/50 dark:border-yellow-400/20 shadow-2xs"
-                              : "bg-gray-50/60 dark:bg-white/5 border-transparent hover:border-gray-200 dark:hover:border-white/10"
+                              ? "bg-[#fffbeb] dark:bg-[#252219] border-yellow-300 dark:border-yellow-500/30 shadow-2xs"
+                              : "bg-white dark:bg-[#1c1c20] border-gray-100 dark:border-white/10 hover:border-gray-200 dark:hover:border-white/20"
                           }`}
                         >
                           <div
@@ -414,13 +415,14 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
                         key={item.id}
                         onDelete={() => promptDeleteSingle(item.id, item.title)}
                         deleteLabel="Delete"
+                        bgClass={!item.isRead ? "bg-[#fffbeb] dark:bg-[#252219]" : "bg-white dark:bg-[#1c1c20]"}
                       >
                         <div
                           onClick={() => !item.isRead && handleMarkAsRead(item.id)}
                           className={`group relative flex gap-3 p-3.5 rounded-2xl transition-all border cursor-pointer ${
                             !item.isRead
-                              ? "bg-yellow-50/70 dark:bg-yellow-400/10 border-yellow-200/50 dark:border-yellow-400/20 shadow-2xs"
-                              : "bg-gray-50/60 dark:bg-white/5 border-transparent hover:border-gray-200 dark:hover:border-white/10"
+                              ? "bg-[#fffbeb] dark:bg-[#252219] border-yellow-300 dark:border-yellow-500/30 shadow-2xs"
+                              : "bg-white dark:bg-[#1c1c20] border-gray-100 dark:border-white/10 hover:border-gray-200 dark:hover:border-white/20"
                           }`}
                         >
                           <div
