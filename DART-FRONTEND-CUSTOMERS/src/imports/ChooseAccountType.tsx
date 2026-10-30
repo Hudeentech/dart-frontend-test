@@ -54,11 +54,12 @@ export default function ChooseAccountType({
       window.location.hostname === "127.0.0.1"
 
     if (selectedType === "rider") {
-      // Sync auth tokens to rider storage keys for seamless handover
+      let token = ""
+      let refresh = ""
       try {
-        const token = localStorage.getItem("dart_access_token")
+        token = localStorage.getItem("dart_access_token") || localStorage.getItem("dart_rider_access_token") || ""
+        refresh = localStorage.getItem("dart_refresh_token") || localStorage.getItem("dart_rider_refresh_token") || ""
         if (token) localStorage.setItem("dart_rider_access_token", token)
-        const refresh = localStorage.getItem("dart_refresh_token")
         if (refresh) localStorage.setItem("dart_rider_refresh_token", refresh)
         const user = localStorage.getItem("dart_user")
         if (user) localStorage.setItem("dart_rider_user", user)
@@ -66,25 +67,21 @@ export default function ChooseAccountType({
         console.warn("[ChooseAccountType] Token sync note:", err)
       }
 
-      setTimeout(() => {
-        window.location.href = isLocal ? "http://localhost:8444/#/onboarding" : "/rider"
-      }, 1200)
-    } else {
-      // Personal Account
-      try {
-        const token = localStorage.getItem("dart_rider_access_token")
-        if (token) localStorage.setItem("dart_access_token", token)
-        const refresh = localStorage.getItem("dart_rider_refresh_token")
-        if (refresh) localStorage.setItem("dart_refresh_token", refresh)
-        const user = localStorage.getItem("dart_rider_user")
-        if (user) localStorage.setItem("dart_user", user)
-      } catch (err) {
-        console.warn("[ChooseAccountType] Token sync note:", err)
-      }
+      const targetBase = isLocal ? "http://localhost:8444" : "/rider"
+      const ssoQuery = token
+        ? `?sso_token=${encodeURIComponent(token)}&sso_refresh=${encodeURIComponent(refresh)}`
+        : ""
+      const destination = `${targetBase}/#/onboarding${ssoQuery}`
 
       setTimeout(() => {
-        window.location.href = isLocal ? "http://localhost:8443" : "/"
-      }, 1200)
+        window.location.href = destination
+      }, 1000)
+    } else {
+      // Personal Account (already here)
+      setTimeout(() => {
+        setIsSwitching(false)
+        onBack?.()
+      }, 800)
     }
   }
 

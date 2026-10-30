@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useAuth } from "../context/AuthContext"
 import { useToast } from "../context/ToastContext"
 import { usersApi } from "../api/account.api"
@@ -11,13 +11,23 @@ export function OnboardingPage() {
   const { user, riderProfile, refresh, setUser, setRiderProfile, skipOnboarding } = useAuth()
   const toast = useToast()
 
-  const [firstName, setFirstName] = useState(user?.firstName || "Divine")
-  const [lastName, setLastName] = useState(user?.lastName || "Augustina")
-  const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || "+2348012345678")
+  const [firstName, setFirstName] = useState(user?.firstName || "")
+  const [lastName, setLastName] = useState(user?.lastName || "")
+  const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || "")
   const [vehicleType, setVehicleType] = useState<VehicleType>(riderProfile?.vehicleType || "MOTORCYCLE")
-  const [plateNumber, setPlateNumber] = useState(riderProfile?.plateNumber || "KJA-123XY")
-  const [licenseNumber, setLicenseNumber] = useState(riderProfile?.licenseNumber || "LAG-LIC-9821")
+  const [plateNumber, setPlateNumber] = useState(riderProfile?.plateNumber || "")
+  const [licenseNumber, setLicenseNumber] = useState(riderProfile?.licenseNumber || "")
   const [loading, setLoading] = useState(false)
+
+  // Sync user details dynamically if hydrated after initial render
+  useEffect(() => {
+    if (user?.firstName) setFirstName(user.firstName)
+    if (user?.lastName) setLastName(user.lastName)
+    if (user?.phoneNumber) setPhoneNumber(user.phoneNumber)
+    if (riderProfile?.vehicleType) setVehicleType(riderProfile.vehicleType)
+    if (riderProfile?.plateNumber) setPlateNumber(riderProfile.plateNumber)
+    if (riderProfile?.licenseNumber) setLicenseNumber(riderProfile.licenseNumber)
+  }, [user, riderProfile])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()

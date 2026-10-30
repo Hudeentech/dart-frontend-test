@@ -75,6 +75,49 @@ interface AuthContextType {
   ) => Promise<{ exists: boolean; message: string }>
 }
 
+const extractSsoTokens = (): string | null => {
+  try {
+    if (typeof window === "undefined") return null
+    const searchParams = new URLSearchParams(window.location.search)
+    let ssoToken = searchParams.get("sso_token")
+    let ssoRefresh = searchParams.get("sso_refresh")
+
+    if (!ssoToken && window.location.hash.includes("?")) {
+      const hashQuery = window.location.hash.split("?")[1]
+      const hashParams = new URLSearchParams(hashQuery)
+      ssoToken = hashParams.get("sso_token")
+      ssoRefresh = hashParams.get("sso_refresh")
+    }
+
+    if (ssoToken) {
+      localStorage.setItem("dart_access_token", ssoToken)
+      if (ssoRefresh) {
+        localStorage.setItem("dart_refresh_token", ssoRefresh)
+      }
+
+      // Clean the query parameters from the URL
+      const url = new URL(window.location.href)
+      url.searchParams.delete("sso_token")
+      url.searchParams.delete("sso_refresh")
+      if (url.hash.includes("?")) {
+        const [hashPath, hashQ] = url.hash.split("?")
+        const hp = new URLSearchParams(hashQ)
+        hp.delete("sso_token")
+        hp.delete("sso_refresh")
+        url.hash = hp.toString() ? `${hashPath}?${hp.toString()}` : hashPath
+      }
+      window.history.replaceState({}, document.title, url.toString())
+      return ssoToken
+    }
+  } catch (err) {
+    console.warn("[Customer Auth] SSO token extraction:", err)
+  }
+  return null
+}
+
+// Extract any handoff SSO token before session bootstrapping
+extractSsoTokens()
+
 export const formatMemberId = (id?: string): string => {
   if (!id) return "DART-USR-88219"
   const clean = id.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()
@@ -86,7 +129,9 @@ export const enrichUser = (u: User | null): User | null => {
   const isVerified = Boolean(
     u.isProfileComplete ||
     (u as any)?.identityProfile?.kycStatus === "VERIFIED" ||
-    (u as any)?.isNinVerified
+    (u as any)?.riderProfile?.isVerified ||
+    (u as any)?.isNinVerified ||
+    localStorage.getItem("dart_account_verified") === "true"
   )
   return {
     ...u,
@@ -165,7 +210,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         try {
           const freshUser = await userApi.getProfile()
           if (freshUser && freshUser.id) {
-            let isVerified = Boolean(freshUser.isProfileComplete)
+            let isVerified = Boolean(
+              freshUser.isProfileComplete ||
+              (freshUser as any)?.riderProfile?.isVerified ||
+              localStorage.getItem("dart_account_verified") === "true"
+            )
             try {
               const v = await userApi.getVerificationStatus()
               if (v?.isNinVerified || v?.identityProfile?.kycStatus === "VERIFIED") {
@@ -173,6 +222,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
               }
             } catch {
               // Ignore verification check error
+            }
+            if (isVerified) {
+              localStorage.setItem("dart_account_verified", "true")
             }
             setEnrichedUser({ ...freshUser, isProfileComplete: isVerified })
           } else {

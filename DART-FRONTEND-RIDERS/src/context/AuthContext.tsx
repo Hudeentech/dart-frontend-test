@@ -27,6 +27,50 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 const SKIP_ONBOARDING_KEY = "dart_rider_skip_onboarding"
 
+const extractSsoTokens = (): string | null => {
+  try {
+    if (typeof window === "undefined") return null
+    const searchParams = new URLSearchParams(window.location.search)
+    let ssoToken = searchParams.get("sso_token")
+    let ssoRefresh = searchParams.get("sso_refresh")
+
+    if (!ssoToken && window.location.hash.includes("?")) {
+      const hashQuery = window.location.hash.split("?")[1]
+      const hashParams = new URLSearchParams(hashQuery)
+      ssoToken = hashParams.get("sso_token")
+      ssoRefresh = hashParams.get("sso_refresh")
+    }
+
+    if (ssoToken) {
+      localStorage.setItem(STORAGE_KEYS.accessToken, ssoToken)
+      if (ssoRefresh) {
+        localStorage.setItem(STORAGE_KEYS.refreshToken, ssoRefresh)
+      }
+      apiClient.setTokens(ssoToken, ssoRefresh || "")
+
+      // Clean the query parameters from the URL
+      const url = new URL(window.location.href)
+      url.searchParams.delete("sso_token")
+      url.searchParams.delete("sso_refresh")
+      if (url.hash.includes("?")) {
+        const [hashPath, hashQ] = url.hash.split("?")
+        const hp = new URLSearchParams(hashQ)
+        hp.delete("sso_token")
+        hp.delete("sso_refresh")
+        url.hash = hp.toString() ? `${hashPath}?${hp.toString()}` : hashPath
+      }
+      window.history.replaceState({}, document.title, url.toString())
+      return ssoToken
+    }
+  } catch (err) {
+    console.warn("[Rider Auth] SSO token extraction:", err)
+  }
+  return null
+}
+
+// Extract any handoff SSO token before session bootstrapping
+extractSsoTokens()
+
 const loadUser = (): User | null => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.user)
@@ -68,17 +112,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const [me, profile] = await Promise.allSettled([usersApi.me(), ridersApi.getProfile()])
       if (me.status === "fulfilled" && me.value) {
-        if (me.value.role !== "RIDER") {
-          clearSession()
-          return
-        }
         setUser(me.value)
       } else {
         // User does not exist or token invalid -> clear session immediately
         clearSession()
         return
       }
-      if (profile.status === "fulfilled") setRiderProfile(profile.value)
+      if (profile.status === "fulfilled" && profile.value) {
+        setRiderProfile(profile.value)
+      }
     } catch {
       clearSession()
     }
@@ -104,9 +146,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (identifier: string, password: string, rememberMe?: boolean) => {
     const res = await authApi.login({ identifier, password, rememberMe })
     if (!res?.user) throw new Error("Login failed. Please try again.")
-    if (res.user.role !== "RIDER") {
-      throw new Error("This account is registered as a customer. Use the Dart customer app or sign up as a rider.")
-    }
     authApi.persistSession(res)
     setUser(res.user)
     setRiderProfile(res.user.riderProfile ?? null)
@@ -134,12 +173,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw loginError
       }
 
-      if (res.user?.role !== "RIDER") {
-        throw new Error(
-          "An account already exists with these details, but it is not a rider account. Please use the account's original app.",
-        )
+      if (res.user) {
+        authApi.persistSession(res)
       }
-      authApi.persistSession(res)
     }
 
     if (!res?.user) throw new Error("Sign up failed. Please try again.")
@@ -166,9 +202,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const googleLogin = async (payload: GoogleAuthPayload) => {
     const res = await authApi.googleRider(payload)
     if (!res?.user) throw new Error("Google authentication failed. Please try again.")
-    if (res.user.role !== "RIDER") {
-      throw new Error("This account is registered as a customer. Use the customer app or sign up as a rider.")
-    }
     authApi.persistSession(res)
     setUser(res.user)
     setRiderProfile(res.user.riderProfile ?? null)
