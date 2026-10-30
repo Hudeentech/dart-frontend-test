@@ -13,10 +13,67 @@ import {
   Trash2,
   Bell,
   CheckCheck,
+  CheckCircle2,
+  Truck,
+  Star,
+  ShieldCheck,
+  AlertCircle,
+  Sparkles,
 } from "lucide-react"
 import type { AppNotification } from "../types/api.types"
 
 type Tab = "All" | "Delivery" | "System"
+
+function getNotificationVisual(item: { type?: string; title?: string; message?: string }) {
+  const text = `${item.type || ""} ${item.title || ""} ${item.message || ""}`.toLowerCase()
+
+  if (text.includes("alert") || text.includes("cancel") || text.includes("fail") || text.includes("dispute")) {
+    return {
+      icon: <AlertCircle className="size-4" />,
+      bg: "bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400",
+    }
+  }
+  if (text.includes("wallet") || text.includes("payment") || text.includes("payout") || text.includes("fund") || text.includes("deposit")) {
+    return {
+      icon: <Wallet className="size-4" />,
+      bg: "bg-yellow-400 text-black shadow-xs",
+    }
+  }
+  if (text.includes("delivered") || text.includes("completed") || text.includes("settled") || text.includes("confirmed")) {
+    return {
+      icon: <CheckCircle2 className="size-4" />,
+      bg: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400",
+    }
+  }
+  if (text.includes("transit") || text.includes("on the way") || text.includes("picked up") || text.includes("en route") || text.includes("dispatch")) {
+    return {
+      icon: <Truck className="size-4" />,
+      bg: "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400",
+    }
+  }
+  if (text.includes("rating") || text.includes("review") || text.includes("star") || text.includes("feedback")) {
+    return {
+      icon: <Star className="size-4 fill-amber-400 text-amber-500" />,
+      bg: "bg-amber-100 dark:bg-amber-400/20 text-amber-700 dark:text-amber-300",
+    }
+  }
+  if (text.includes("verif") || text.includes("identity") || text.includes("nin") || text.includes("security") || text.includes("kyc")) {
+    return {
+      icon: <ShieldCheck className="size-4" />,
+      bg: "bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300",
+    }
+  }
+  if (text.includes("package") || text.includes("order") || text.includes("delivery") || text.includes("request")) {
+    return {
+      icon: <Package className="size-4" />,
+      bg: "bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400",
+    }
+  }
+  return {
+    icon: <Sparkles className="size-4" />,
+    bg: "bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300",
+  }
+}
 
 export function NotificationsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { reloadUnread } = useRider()
@@ -257,7 +314,7 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
 
                 <div className="space-y-2.5">
                   {todayItems.map((item) => {
-                    const isWallet = (item.type || "").toUpperCase().includes("WALLET") || (item.type || "").toUpperCase().includes("PAYMENT")
+                    const visual = getNotificationVisual(item)
                     return (
                       <div
                         key={item.id}
@@ -269,13 +326,9 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
                         }`}
                       >
                         <div
-                          className={`size-9 rounded-xl flex items-center justify-center shrink-0 ${
-                            isWallet
-                              ? "bg-yellow-400 text-black font-bold"
-                              : "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-                          }`}
+                          className={`size-9 rounded-xl flex items-center justify-center shrink-0 ${visual.bg}`}
                         >
-                          {isWallet ? <Wallet className="size-4" /> : <Package className="size-4" />}
+                          {visual.icon}
                         </div>
                         <div className="flex-1 min-w-0 pr-8">
                           <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
@@ -317,7 +370,7 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
 
                 <div className="space-y-2.5">
                   {earlierItems.map((item) => {
-                    const isWallet = (item.type || "").toUpperCase().includes("WALLET") || (item.type || "").toUpperCase().includes("PAYMENT")
+                    const visual = getNotificationVisual(item)
                     return (
                       <div
                         key={item.id}
@@ -329,13 +382,9 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
                         }`}
                       >
                         <div
-                          className={`size-9 rounded-xl flex items-center justify-center shrink-0 ${
-                            isWallet
-                              ? "bg-yellow-400 text-black font-bold"
-                              : "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-                          }`}
+                          className={`size-9 rounded-xl flex items-center justify-center shrink-0 ${visual.bg}`}
                         >
-                          {isWallet ? <Wallet className="size-4" /> : <Package className="size-4" />}
+                          {visual.icon}
                         </div>
                         <div className="flex-1 min-w-0 pr-8">
                           <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug">

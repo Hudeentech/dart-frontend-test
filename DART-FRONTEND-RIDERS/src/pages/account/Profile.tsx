@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "../../context/AuthContext"
 import { fullName } from "../../utils/format"
+import NotificationButton from "../../components/NotificationButton"
 
 interface ProfileProps {
   onBack: () => void
@@ -81,14 +82,7 @@ export default function Profile({
           Profile
         </h1>
 
-        <button
-          type="button"
-          onClick={onOpenNotifications}
-          className="w-10 h-10 rounded-full bg-yellow-400 hover:bg-yellow-500 text-black shadow-xs flex md:hidden items-center justify-center transition-transform hover:scale-105 active:scale-95 cursor-pointer"
-          title="Notifications"
-        >
-          <Bell className="w-5 h-5 fill-black/15 stroke-[2.2]" />
-        </button>
+        <NotificationButton onClick={onOpenNotifications} />
         <div className="w-10 hidden md:block" aria-hidden="true" />
       </div>
 

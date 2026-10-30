@@ -8,10 +8,12 @@ export interface NotificationItem {
   id: string | number
   type: "Delivery" | "System"
   title: string
+  message?: string
   time: string
   isUnread?: boolean
   dateGroup: "Today" | "This week"
-  icon: "wallet" | "package"
+  icon?: string
+  rawType?: string
 }
 
 const INITIAL_NOTIFICATIONS: NotificationItem[] = []
@@ -47,24 +49,43 @@ function calculateDateGroup(dateStr?: string | Date): "Today" | "This week" {
 }
 
 function mapApiNotification(apiNotif: ApiNotification): NotificationItem {
+  const typeStr = (apiNotif.type || "").toUpperCase()
+  const text = `${typeStr} ${apiNotif.title || ""} ${apiNotif.message || ""}`.toLowerCase()
+
   const isDelivery =
-    apiNotif.type === "ORDER_UPDATE" ||
-    apiNotif.type === "DELIVERY" ||
-    apiNotif.type.toLowerCase().includes("order")
-  const isPayment =
-    apiNotif.type === "PAYMENT" ||
-    apiNotif.type === "WALLET" ||
-    apiNotif.title?.toLowerCase().includes("wallet") ||
-    apiNotif.message?.toLowerCase().includes("wallet")
+    typeStr.includes("DELIVERY") ||
+    typeStr.includes("ORDER") ||
+    text.includes("package") ||
+    text.includes("pickup") ||
+    text.includes("dropoff")
+
+  let iconKey = "system"
+  if (text.includes("cancel") || text.includes("fail") || text.includes("dispute")) {
+    iconKey = "alert"
+  } else if (text.includes("wallet") || text.includes("payment") || text.includes("payout") || text.includes("fund") || text.includes("deposit")) {
+    iconKey = "wallet"
+  } else if (text.includes("delivered") || text.includes("completed") || text.includes("settled") || text.includes("confirmed")) {
+    iconKey = "delivered"
+  } else if (text.includes("transit") || text.includes("on the way") || text.includes("picked up") || text.includes("en route") || text.includes("dispatch")) {
+    iconKey = "transit"
+  } else if (text.includes("rating") || text.includes("review") || text.includes("star") || text.includes("feedback")) {
+    iconKey = "rating"
+  } else if (text.includes("verif") || text.includes("identity") || text.includes("nin") || text.includes("security") || text.includes("kyc")) {
+    iconKey = "verification"
+  } else if (isDelivery || text.includes("package") || text.includes("order")) {
+    iconKey = "package"
+  }
 
   return {
     id: apiNotif.id,
     type: isDelivery ? "Delivery" : "System",
-    title: apiNotif.message || apiNotif.title,
+    title: apiNotif.title || apiNotif.message,
+    message: apiNotif.message && apiNotif.message !== apiNotif.title ? apiNotif.message : undefined,
     time: formatRelativeTime(apiNotif.createdAt),
     isUnread: !apiNotif.isRead,
     dateGroup: calculateDateGroup(apiNotif.createdAt),
-    icon: isPayment ? "wallet" : "package",
+    icon: iconKey,
+    rawType: apiNotif.type,
   }
 }
 

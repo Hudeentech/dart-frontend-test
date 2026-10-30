@@ -3,6 +3,7 @@ import { useRider } from "../context/RiderContext"
 import { canAccept, formatNaira, STATUS_BUCKET } from "../utils/format"
 import { goBack, navigate } from "../hooks/router"
 import { ArrowLeft, Bell, RefreshCw, Inbox, CheckCircle2 } from "lucide-react"
+import NotificationButton from "../components/NotificationButton"
 import type { Order } from "../types/api.types"
 
 // Package image assets matching screenshot
@@ -127,15 +128,7 @@ export function JobsPage() {
             </button>
 
             {/* Bell Icon Button (hidden on desktop per desktop layout rules) */}
-            <button
-              type="button"
-              onClick={() => navigate("/notifications")}
-              className="w-10 h-10 rounded-full border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 active:scale-95 transition cursor-pointer md:hidden"
-              aria-label="Notifications"
-              title="Notifications"
-            >
-              <Bell className="w-5 h-5" />
-            </button>
+            <NotificationButton />
           </div>
         </header>
 

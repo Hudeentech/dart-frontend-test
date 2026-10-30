@@ -8,6 +8,12 @@ import {
   Trash2,
   Bell,
   CheckCheck,
+  CheckCircle2,
+  Truck,
+  Star,
+  ShieldCheck,
+  AlertCircle,
+  Sparkles,
 } from "lucide-react"
 import {
   useNotifications,
@@ -15,6 +21,62 @@ import {
 } from "../context/NotificationContext"
 
 type Tab = "All" | "Delivery" | "System"
+
+function getNotificationVisual(item: {
+  icon?: string
+  rawType?: string
+  title?: string
+  message?: string
+}) {
+  const text = `${item.icon || ""} ${item.rawType || ""} ${item.title || ""} ${item.message || ""}`.toLowerCase()
+
+  if (text.includes("alert") || text.includes("cancel") || text.includes("fail") || text.includes("dispute")) {
+    return {
+      icon: <AlertCircle className="w-4 h-4" />,
+      bg: "bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400",
+    }
+  }
+  if (text.includes("wallet") || text.includes("payment") || text.includes("payout") || text.includes("fund") || text.includes("deposit")) {
+    return {
+      icon: <Wallet className="w-4 h-4" />,
+      bg: "bg-yellow-400 text-black shadow-xs",
+    }
+  }
+  if (text.includes("delivered") || text.includes("completed") || text.includes("settled") || text.includes("confirmed")) {
+    return {
+      icon: <CheckCircle2 className="w-4 h-4" />,
+      bg: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400",
+    }
+  }
+  if (text.includes("transit") || text.includes("on the way") || text.includes("picked up") || text.includes("en route") || text.includes("dispatch")) {
+    return {
+      icon: <Truck className="w-4 h-4" />,
+      bg: "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400",
+    }
+  }
+  if (text.includes("rating") || text.includes("review") || text.includes("star") || text.includes("feedback")) {
+    return {
+      icon: <Star className="w-4 h-4 fill-amber-400 text-amber-500" />,
+      bg: "bg-amber-100 dark:bg-amber-400/20 text-amber-700 dark:text-amber-300",
+    }
+  }
+  if (text.includes("verif") || text.includes("identity") || text.includes("nin") || text.includes("security") || text.includes("kyc")) {
+    return {
+      icon: <ShieldCheck className="w-4 h-4" />,
+      bg: "bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300",
+    }
+  }
+  if (text.includes("package") || text.includes("order") || text.includes("delivery") || text.includes("request")) {
+    return {
+      icon: <Package className="w-4 h-4" />,
+      bg: "bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400",
+    }
+  }
+  return {
+    icon: <Sparkles className="w-4 h-4" />,
+    bg: "bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300",
+  }
+}
 
 export default function Notifications({
   onClose,
@@ -246,42 +308,42 @@ export default function Notifications({
                   </div>
 
                   <div className="space-y-2.5">
-                    {todayItems.map((item) => (
-                      <div
-                        key={item.id}
-                        onClick={() => item.isUnread && markAsRead(item.id)}
-                        className={`flex gap-3 p-3.5 rounded-2xl transition-all relative border cursor-pointer ${
-                          item.isUnread
-                            ? "bg-yellow-50/70 dark:bg-yellow-400/10 border-yellow-200/50 dark:border-yellow-400/20 shadow-2xs"
-                            : "bg-gray-50/50 dark:bg-white/5 border-transparent hover:border-gray-200 dark:hover:border-white/10"
-                        }`}
-                      >
+                    {todayItems.map((item) => {
+                      const visual = getNotificationVisual(item)
+                      return (
                         <div
-                          className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                            item.icon === "wallet"
-                              ? "bg-yellow-400 text-black"
-                              : "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                          key={item.id}
+                          onClick={() => item.isUnread && markAsRead(item.id)}
+                          className={`flex gap-3 p-3.5 rounded-2xl transition-all relative border cursor-pointer ${
+                            item.isUnread
+                              ? "bg-yellow-50/70 dark:bg-yellow-400/10 border-yellow-200/50 dark:border-yellow-400/20 shadow-2xs"
+                              : "bg-gray-50/50 dark:bg-white/5 border-transparent hover:border-gray-200 dark:hover:border-white/10"
                           }`}
                         >
-                          {item.icon === "wallet" ? (
-                            <Wallet className="w-4 h-4" />
-                          ) : (
-                            <Package className="w-4 h-4" />
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${visual.bg}`}
+                          >
+                            {visual.icon}
+                          </div>
+                          <div className="flex-1 min-w-0 pr-2">
+                            <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
+                              {item.title}
+                            </p>
+                            {item.message && item.message !== item.title && (
+                              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
+                                {item.message}
+                              </p>
+                            )}
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                              {item.time}
+                            </p>
+                          </div>
+                          {item.isUnread && (
+                            <div className="w-2 h-2 bg-yellow-500 rounded-full mt-1.5 shrink-0 animate-pulse"></div>
                           )}
                         </div>
-                        <div className="flex-1 min-w-0 pr-2">
-                          <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white leading-snug">
-                            {item.title}
-                          </p>
-                          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                            {item.time}
-                          </p>
-                        </div>
-                        {item.isUnread && (
-                          <div className="w-2 h-2 bg-yellow-500 rounded-full mt-1.5 shrink-0 animate-pulse"></div>
-                        )}
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -296,42 +358,42 @@ export default function Notifications({
                   </div>
 
                   <div className="space-y-2.5">
-                    {thisWeekItems.map((item) => (
-                      <div
-                        key={item.id}
-                        onClick={() => item.isUnread && markAsRead(item.id)}
-                        className={`flex gap-3 p-3.5 rounded-2xl transition-all border cursor-pointer ${
-                          item.isUnread
-                            ? "bg-yellow-50/70 dark:bg-yellow-400/10 border-yellow-200/50 dark:border-yellow-400/20 shadow-2xs"
-                            : "bg-gray-50/50 dark:bg-white/5 border-transparent hover:border-gray-200 dark:hover:border-white/10"
-                        }`}
-                      >
+                    {thisWeekItems.map((item) => {
+                      const visual = getNotificationVisual(item)
+                      return (
                         <div
-                          className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                            item.icon === "wallet"
-                              ? "bg-yellow-400 text-black shadow-2xs"
-                              : "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                          key={item.id}
+                          onClick={() => item.isUnread && markAsRead(item.id)}
+                          className={`flex gap-3 p-3.5 rounded-2xl transition-all border cursor-pointer ${
+                            item.isUnread
+                              ? "bg-yellow-50/70 dark:bg-yellow-400/10 border-yellow-200/50 dark:border-yellow-400/20 shadow-2xs"
+                              : "bg-gray-50/50 dark:bg-white/5 border-transparent hover:border-gray-200 dark:hover:border-white/10"
                           }`}
                         >
-                          {item.icon === "wallet" ? (
-                            <Wallet className="w-4 h-4" />
-                          ) : (
-                            <Package className="w-4 h-4" />
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${visual.bg}`}
+                          >
+                            {visual.icon}
+                          </div>
+                          <div className="flex-1 min-w-0 pr-2">
+                            <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
+                              {item.title}
+                            </p>
+                            {item.message && item.message !== item.title && (
+                              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
+                                {item.message}
+                              </p>
+                            )}
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                              {item.time}
+                            </p>
+                          </div>
+                          {item.isUnread && (
+                            <div className="w-2 h-2 bg-yellow-500 rounded-full mt-1.5 shrink-0 animate-pulse"></div>
                           )}
                         </div>
-                        <div className="flex-1 min-w-0 pr-2">
-                          <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white leading-snug">
-                            {item.title}
-                          </p>
-                          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                            {item.time}
-                          </p>
-                        </div>
-                        {item.isUnread && (
-                          <div className="w-2 h-2 bg-yellow-500 rounded-full mt-1.5 shrink-0 animate-pulse"></div>
-                        )}
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}

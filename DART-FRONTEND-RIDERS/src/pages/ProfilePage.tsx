@@ -4,6 +4,7 @@ import { useTheme } from "../context/ThemeContext"
 import { useToast } from "../context/ToastContext"
 import { fullName } from "../utils/format"
 import { navigate } from "../hooks/router"
+import NotificationButton from "../components/NotificationButton"
 import {
   ArrowLeft,
   Bell,
@@ -267,15 +268,7 @@ export function ProfilePage() {
           <h1 className="text-xl font-medium text-gray-900 dark:text-white">
             Account
           </h1>
-          <button
-            type="button"
-            onClick={() => navigate("/notifications")}
-            className="relative flex md:hidden size-10 items-center justify-center rounded-full bg-yellow-400 text-black shadow-xs hover:bg-yellow-300 active:scale-95 transition cursor-pointer"
-            aria-label="Notifications"
-            title="Notifications"
-          >
-            <Bell className="size-4.5 fill-black stroke-[2.2]" />
-          </button>
+          <NotificationButton />
           {/* Spacer to keep title centered on desktop */}
           <div className="w-10 hidden md:block" aria-hidden="true" />
         </div>
