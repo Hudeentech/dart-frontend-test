@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react"
 import { useTheme } from "../context/ThemeContext"
 import { ChevronLeft, ChevronRight, Sun, Moon } from "lucide-react"
-import carousel1 from "../assets/dart_carousel_1.jpg"
-import carousel2 from "../assets/dart_carousel_2.jpg"
-import carousel3 from "../assets/dart_carousel_3.jpg"
-import carousel4 from "../assets/dart_carousel_4.jpg"
+import carousel1 from "../assets/dart_carousel_1.png"
+import carousel2 from "../assets/dart_carousel_2.png"
+import carousel3 from "../assets/dart_carousel_3.png"
+import carousel4 from "../assets/dart_carousel_4.png"
 import DartLogo from "./DartLogo"
 
 interface AuthLayoutProps {
