@@ -103,9 +103,9 @@ export function AuthLayout({
   }
 
   return (
-    <div className="min-h-[100dvh] w-full flex flex-col xl:flex-row bg-[#fcfcfc] dark:bg-[#0c0c0e] text-gray-900 dark:text-white transition-colors overflow-hidden">
+    <div className="min-h-[100dvh] w-full flex flex-col xl:h-[100dvh] xl:min-h-0 xl:flex-row bg-[#fcfcfc] dark:bg-[#0c0c0e] text-gray-900 dark:text-white transition-colors overflow-hidden">
       {/* Left Column: Visual Carousel Panel (Desktop only - hidden on mobile and tablet) */}
-      <div className="hidden xl:flex xl:w-1/2 2xl:w-[52%] relative overflow-hidden bg-gray-950 flex-col justify-between p-8 lg:p-12 shrink-0 select-none">
+      <div className="hidden xl:flex xl:h-full xl:w-1/2 2xl:w-[60%] relative overflow-hidden bg-gray-950 flex-col justify-between p-8 lg:p-12 shrink-0 select-none">
         {/* Background Carousel Images with Smooth Cross-fade */}
         {SLIDES.map((slide, index) => (
           <div
@@ -117,7 +117,7 @@ export function AuthLayout({
             <img
               src={slide.image}
               alt={slide.title}
-              className="w-full h-full object-cover object-center scale-105 filter brightness-90 contrast-105"
+              className="w-full h-full object-contain"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
           </div>
@@ -181,7 +181,7 @@ export function AuthLayout({
       </div>
 
       {/* Right Column: Form Area (Full screen on mobile and tablet) */}
-      <div className="flex-1 flex flex-col min-h-[100dvh] xl:min-h-screen overflow-y-auto relative bg-[#fcfcfc] dark:bg-[#0c0c0e]">
+      <div className="flex-1 flex flex-col min-h-[100dvh] xl:h-full xl:min-h-0 overflow-y-auto relative bg-[#fcfcfc] dark:bg-[#0c0c0e]">
         {/* Top Bar with Logo (Mobile & Tablet) & Theme Switcher */}
         {!hideTopBar && (
           <div className="w-full flex items-center justify-between px-5 sm:px-6 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-3 sm:pb-4 shrink-0">

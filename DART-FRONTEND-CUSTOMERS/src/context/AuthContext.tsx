@@ -5,7 +5,12 @@ import React, {
   useEffect,
   ReactNode,
 } from "react"
-import { User, VerificationType, OnboardingPayload } from "../types/api.types"
+import {
+  User,
+  VerificationType,
+  OnboardingPayload,
+  GoogleAuthPayload,
+} from "../types/api.types"
 import { authApi } from "../api/auth.api"
 import { userApi } from "../api/user.api"
 import { SESSION_EXPIRED_EVENT } from "../api/client"
@@ -20,6 +25,7 @@ interface AuthContextType {
   authType: VerificationType
   authMode: "login" | "signup"
   setAuthMode: (mode: "login" | "signup") => void
+  googleLogin: (payload: GoogleAuthPayload) => Promise<void>
   rememberMe: boolean
   setRememberMe: (remember: boolean) => void
   signupPassword?: string
@@ -548,6 +554,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     }
   }
 
+  const googleLogin = async (payload: GoogleAuthPayload) => {
+    const res = await authApi.googleCustomer(payload)
+    if (!res?.user) throw new Error("Google sign-in failed. Please try again.")
+    setEnrichedUser(res.user)
+  }
+
   /**
    * Logout user, clear tokens, and reset state
    */
@@ -584,6 +596,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         authType,
         authMode,
         setAuthMode,
+        googleLogin,
         rememberMe,
         setRememberMe,
         signupPassword,

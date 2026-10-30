@@ -144,3 +144,7 @@
 *.stl                filter=lfs diff=lfs merge=lfs -text
 *.nc                 filter=lfs diff=lfs merge=lfs -text
 *.mat                filter=lfs diff=lfs merge=lfs -text
+
+# Keep auth carousel assets in Git so deployment builds do not need LFS support.
+src/assets/dart_carousel_*.jpg -filter -diff -merge -text
+src/assets/dart_carousel_*.png -filter -diff -merge -text
