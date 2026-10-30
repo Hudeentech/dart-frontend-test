@@ -1,0 +1,20 @@
+# Workspace Non-Frontend Projects
+/DART-BACKEND/
+/DART-MOBILE-APP/
+/AUDITME.md
+.git_original_clone_backup/
+
+# Build outputs & dependencies
+node_modules/
+dist/
+build/
+.cache/
+.vite/
+*.log
+.DS_Store
+Thumbs.db
+
+# Secrets & environment
+.env
+.env.*
+!.env.example
