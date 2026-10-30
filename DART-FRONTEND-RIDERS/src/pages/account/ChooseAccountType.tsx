@@ -131,9 +131,6 @@ export default function ChooseAccountType({
           {/* Hero Banner Card matching design, responsive and theme-synced */}
           <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-gray-900 via-gray-900 to-gray-950 dark:from-[#181a20] dark:to-[#121417] text-white shadow-md relative overflow-hidden border border-white/5 w-full">
             <div className="relative z-10 max-w-xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm text-[11px] font-semibold text-yellow-400 mb-3 border border-white/10">
-                <span>DART Account Roles</span>
-              </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white leading-snug">
                 How would you like to use DART?
               </h1>
