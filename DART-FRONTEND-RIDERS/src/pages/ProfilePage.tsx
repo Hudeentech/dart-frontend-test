@@ -44,12 +44,14 @@ import RateDart from "./account/RateDart"
 import AboutDart from "./account/AboutDart"
 import AppearanceModal from "./account/AppearanceModal"
 import LanguageModal, { LanguageOption } from "./account/LanguageModal"
+import ChooseAccountType from "./account/ChooseAccountType"
 
 type AccountView =
   | "main"
   | "profile"
   | "personal"
   | "verification"
+  | "account-type"
   | "payment"
   | "location"
   | "vehicle"
@@ -141,6 +143,19 @@ export function ProfilePage() {
       <div className="flex-1 flex flex-col bg-[#fcfcfc] dark:bg-[#0c0c0e] h-full overflow-y-auto transition-colors">
         <div className="w-full max-w-4xl 2xl:max-w-5xl mx-auto flex flex-col min-h-full bg-transparent border-0 md:border-x border-gray-200/70 dark:border-white/5 relative transition-colors">
           <AccountVerification onBack={() => setView("main")} />
+        </div>
+      </div>
+    )
+  }
+
+  if (view === "account-type") {
+    return (
+      <div className="flex-1 flex flex-col bg-[#fcfcfc] dark:bg-[#0c0c0e] h-full overflow-y-auto transition-colors">
+        <div className="w-full max-w-4xl 2xl:max-w-5xl mx-auto flex flex-col min-h-full bg-transparent border-0 md:border-x border-gray-200/70 dark:border-white/5 relative transition-colors">
+          <ChooseAccountType
+            onBack={() => setView("main")}
+            currentType="rider"
+          />
         </div>
       </div>
     )
@@ -390,6 +405,33 @@ export function ProfilePage() {
                     </span>
                     <span className="text-xs text-gray-500 dark:text-gray-400">
                       Driver's License & NIN KYC status
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-800 dark:group-hover:text-white transition-colors shrink-0" />
+              </button>
+
+              {/* Account Type / Switch Account */}
+              <button
+                type="button"
+                onClick={() => setView("account-type")}
+                className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors group cursor-pointer text-left"
+              >
+                <div className="flex items-center gap-4 text-left">
+                  <div className="w-10 h-10 rounded-full bg-gray-50 dark:bg-white/5 flex items-center justify-center border border-gray-100 dark:border-white/10 shrink-0">
+                    <Users className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                  </div>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-900 dark:text-white">
+                        Account Type
+                      </span>
+                      <span className="text-[10px] font-bold text-gray-950 bg-[#FFCC00] px-2 py-0.5 rounded-full uppercase">
+                        Rider
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Switch to personal account or manage roles
                     </span>
                   </div>
                 </div>

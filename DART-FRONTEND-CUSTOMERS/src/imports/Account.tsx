@@ -271,11 +271,13 @@ export default function Account({
 
   if (view === "account-type") {
     return (
-      <div className="flex-1 flex flex-col bg-[#121417] h-full overflow-y-auto">
-        <ChooseAccountType
-          onBack={() => setView("main")}
-          currentType="customer"
-        />
+      <div className="flex-1 flex flex-col bg-[#fcfcfc] dark:bg-[#0c0c0e] h-full overflow-y-auto transition-colors">
+        <div className="w-full max-w-4xl 2xl:max-w-5xl mx-auto flex flex-col min-h-full bg-transparent border-0 md:border-x border-gray-200/70 dark:border-white/5 relative transition-colors">
+          <ChooseAccountType
+            onBack={() => setView("main")}
+            currentType="customer"
+          />
+        </div>
       </div>
     )
   }
