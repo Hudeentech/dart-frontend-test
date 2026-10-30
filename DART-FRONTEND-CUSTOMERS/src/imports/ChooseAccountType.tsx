@@ -139,19 +139,14 @@ export default function ChooseAccountType({
       {/* Main Content: 100% width on Desktop Middle Layout */}
       <div className="flex-1 w-full px-4 sm:px-6 md:px-8 py-5 sm:py-6 flex flex-col justify-between max-w-4xl 2xl:max-w-5xl mx-auto">
         <div className="space-y-6 w-full">
-          {/* Hero Banner Card matching design, responsive and theme-synced */}
-          <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-gray-900 via-gray-900 to-gray-950 dark:from-[#181a20] dark:to-[#121417] text-white shadow-md relative overflow-hidden border border-white/5 w-full">
-            <div className="relative z-10 max-w-xl">
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white leading-snug">
-                How would you like to use DART?
-              </h1>
-              <p className="text-xs sm:text-sm text-gray-300 mt-2 font-normal leading-relaxed">
-                Choose the account type that best describes you. You can switch between roles at any time.
-              </p>
-            </div>
-
-            {/* Ambient decorative graphic */}
-            <div className="absolute -right-8 -bottom-10 w-44 h-44 bg-[#FFCC00]/10 rounded-full blur-2xl pointer-events-none" />
+          {/* Clean Headline Section */}
+          <div className="w-full pt-1 pb-1">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white leading-snug">
+              How would you like to use DART?
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
+              Choose the account type that best describes you.
+            </p>
           </div>
 
           {/* Toast / Notification Notice */}
