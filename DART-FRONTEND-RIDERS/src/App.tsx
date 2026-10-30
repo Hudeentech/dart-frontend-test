@@ -54,9 +54,9 @@ function AppContent() {
   // 3. Authenticated but incomplete rider details -> Complete Onboarding
   if (needsOnboarding) {
     return (
-      <AppShell path="/onboarding" hideNav>
+      <AuthLayout hideCarousel maxWidthClass="max-w-xl">
         <OnboardingPage />
-      </AppShell>
+      </AuthLayout>
     )
   }
 
@@ -83,6 +83,12 @@ function AppContent() {
     switch (path) {
       case "/":
         return <HomePage />
+      case "/onboarding":
+        return (
+          <AuthLayout hideCarousel maxWidthClass="max-w-xl">
+            <OnboardingPage />
+          </AuthLayout>
+        )
       case "/jobs":
         return <JobsPage />
       case "/earnings":

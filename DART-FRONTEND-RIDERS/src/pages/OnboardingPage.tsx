@@ -104,7 +104,7 @@ export function OnboardingPage() {
   }
 
   return (
-    <div className="py-2">
+    <div className="w-full py-2">
       <TopBar
         title="Rider Setup"
         right={

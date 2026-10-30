@@ -150,9 +150,18 @@ function AppContent() {
 
   // When user is navigating through onboarding flow
   if (isOnboardingStep) {
+    const maxWidth =
+      current === "account-type"
+        ? "max-w-2xl 2xl:max-w-3xl"
+        : "max-w-md sm:max-w-lg"
+
     return (
       <div className="w-full min-h-[100dvh] flex flex-col bg-[#fcfcfc] dark:bg-[#0c0c0e] text-gray-900 dark:text-white transition-colors">
-        <AuthLayout hideTopBar={current === "account-type"}>
+        <AuthLayout
+          hideCarousel={true}
+          maxWidthClass={maxWidth}
+          hideTopBar={current === "account-type"}
+        >
           {current === "otp2" && (
             <Otp2
               onNext={(target?: string) => {

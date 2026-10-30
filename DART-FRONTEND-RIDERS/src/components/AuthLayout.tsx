@@ -10,6 +10,8 @@ import DartLogo from "./DartLogo"
 interface AuthLayoutProps {
   children: React.ReactNode
   hideTopBar?: boolean
+  hideCarousel?: boolean
+  maxWidthClass?: string
 }
 
 const SLIDES = [
@@ -51,22 +53,66 @@ const SLIDES = [
   },
 ]
 
-export function AuthLayout({ children, hideTopBar = false }: AuthLayoutProps) {
+export function AuthLayout({
+  children,
+  hideTopBar = false,
+  hideCarousel = false,
+  maxWidthClass = "max-w-md",
+}: AuthLayoutProps) {
   const { resolvedTheme, toggleTheme } = useTheme()
   const [currentSlide, setCurrentSlide] = useState(0)
 
-  // Auto advance carousel every 5 seconds
+  // Auto advance carousel every 5 seconds (only when carousel is visible)
   useEffect(() => {
+    if (hideCarousel) return
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % SLIDES.length)
     }, 5000)
     return () => clearInterval(timer)
-  }, [])
+  }, [hideCarousel])
 
   const nextSlide = () => setCurrentSlide((prev) => (prev + 1) % SLIDES.length)
   const prevSlide = () => setCurrentSlide((prev) => (prev - 1 + SLIDES.length) % SLIDES.length)
 
   const activeSlide = SLIDES[currentSlide]
+
+  if (hideCarousel) {
+    return (
+      <div className="min-h-[100dvh] w-full flex flex-col bg-[#fcfcfc] dark:bg-[#0c0c0e] text-gray-900 dark:text-white transition-colors overflow-x-hidden">
+        {/* Top Header Bar with Logo and Theme Switcher (Desktop and Mobile) */}
+        {!hideTopBar && (
+          <header className="w-full flex items-center justify-between px-5 sm:px-8 pt-[max(0.875rem,env(safe-area-inset-top,0px))] pb-3 sm:pb-3.5 border-b border-gray-100 dark:border-white/5 bg-[#fcfcfc]/90 dark:bg-[#0c0c0e]/90 backdrop-blur-md sticky top-0 z-30 shrink-0">
+            <div className="flex items-center gap-2">
+              <DartLogo variant="auto" className="h-9 sm:h-10 w-auto" />
+              <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-black bg-[#FFCC00] px-2 py-0.5 rounded-full shadow-2xs">
+                Rider
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={toggleTheme}
+              title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
+              className="p-2.5 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 transition-colors border border-transparent dark:border-white/5 cursor-pointer touch-manipulation ml-auto"
+            >
+              {resolvedTheme === "dark" ? (
+                <Sun className="w-5 h-5 text-yellow-400" />
+              ) : (
+                <Moon className="w-5 h-5 text-gray-700" />
+              )}
+            </button>
+          </header>
+        )}
+
+        {/* Centralized Onboarding Content Area on Desktop */}
+        <main className="flex-1 w-full flex items-center justify-center px-4 sm:px-6 md:px-8 py-6 sm:py-10 overflow-y-auto">
+          <div className={`w-full ${maxWidthClass} mx-auto flex flex-col animate-in fade-in duration-200`}>
+            {children}
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-[100dvh] w-full flex flex-col xl:flex-row bg-[#fcfcfc] dark:bg-[#0c0c0e] text-gray-900 dark:text-white transition-colors overflow-hidden">
