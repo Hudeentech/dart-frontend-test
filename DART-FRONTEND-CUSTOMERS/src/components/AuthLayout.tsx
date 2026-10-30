@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react"
 import { useTheme } from "../context/ThemeContext"
 import { Sun, Moon, ChevronLeft, ChevronRight } from "lucide-react"
-import carousel1 from "../assets/dart_carousel_1.png"
-import carousel2 from "../assets/dart_carousel_2.png"
-import carousel3 from "../assets/dart_carousel_3.png"
+import carousel1 from "../assets/dart_carousel_1.jpg"
+import carousel2 from "../assets/dart_carousel_2.jpg"
+import carousel3 from "../assets/dart_carousel_3.jpg"
 import carousel4 from "../assets/dart_carousel_4.png"
 import DartLogo from "./DartLogo"
 
@@ -17,38 +17,26 @@ interface AuthLayoutProps {
 const SLIDES = [
   {
     image: carousel1,
-    badge: "Live Dispatch",
-    badgeDetail: "ETA: 14 mins",
-    itemTitle: "Google Pixel 9 Pro",
-    itemSubtitle: "From: GIG Terminal • Destination: Auchi Campus",
+    objectPosition: "70% center",
     title: "Delivering everything anywhere",
     description:
       "We connect you to trusted rider for fast, safe reliable deliveries.",
   },
   {
     image: carousel2,
-    badge: "Real-time Updates",
-    badgeDetail: "GPS Active",
-    itemTitle: "Package On Route",
-    itemSubtitle: "Instant status updates from pick-up to drop-off",
+    objectPosition: "28% center",
     title: "Track every step",
     description: "Real-time update keeps you informed from pick-up to delivery",
   },
   {
     image: carousel3,
-    badge: "Verified Courier",
-    badgeDetail: "4.9 ★ Rating",
-    itemTitle: "Top-Rated Fleet",
-    itemSubtitle: "Background checked riders ready at your location",
+    objectPosition: "center center",
     title: "Choose trusted riders",
     description: "Pick from top rated riders near you and book in seconds.",
   },
   {
     image: carousel4,
-    badge: "Doorstep Delivery",
-    badgeDetail: "PIN Verified",
-    itemTitle: "Delivered On Time",
-    itemSubtitle: "Safe, insured, and verified directly into your hands",
+    objectPosition: "52% center",
     title: "Delivered with care",
     description: "Your package, your priority. safe, secure and on time",
   },
@@ -137,10 +125,10 @@ export default function AuthLayout({
             <img
               src={slide.image}
               alt={slide.title}
-              className="w-full h-full object-cover object-center scale-105 filter brightness-90 contrast-105"
+              className="w-full h-full object-cover scale-105 filter brightness-90 contrast-105"
+              style={{ objectPosition: slide.objectPosition }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-black/30" />
-            <div className="absolute inset-0 bg-yellow-500/10 mix-blend-overlay" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
           </div>
         ))}
 
@@ -151,32 +139,6 @@ export default function AuthLayout({
             <span className="text-[10px] uppercase tracking-wider text-yellow-400 font-semibold bg-yellow-400/10 px-2.5 py-0.5 rounded-full border border-yellow-400/20">
               Logistics
             </span>
-          </div>
-        </div>
-
-        {/* Floating Delivery Card (Social Proof / Context) */}
-        <div className="relative z-10 my-auto max-w-sm">
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4 text-white shadow-2xl transition-all duration-500">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
-                </span>
-                <span className="text-xs font-semibold uppercase tracking-wider text-green-300">
-                  {activeSlide.badge}
-                </span>
-              </div>
-              <span className="text-xs font-medium text-white/80 bg-white/10 px-2 py-0.5 rounded-full">
-                {activeSlide.badgeDetail}
-              </span>
-            </div>
-            <p className="text-base font-bold text-white mb-0.5 transition-all duration-300">
-              {activeSlide.itemTitle}
-            </p>
-            <p className="text-xs text-white/70 transition-all duration-300">
-              {activeSlide.itemSubtitle}
-            </p>
           </div>
         </div>
 

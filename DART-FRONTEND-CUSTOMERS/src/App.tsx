@@ -27,13 +27,50 @@ const FLOW: Screen[] = [
   "account-success",
 ]
 
+const ONBOARDING_HISTORY_KEY = "dart_customer_onboarding_history"
+
+const loadOnboardingHistory = (): Screen[] => {
+  try {
+    const saved = sessionStorage.getItem(ONBOARDING_HISTORY_KEY)
+    if (!saved) return ["phone-auth"]
+
+    const parsed: unknown = JSON.parse(saved)
+    if (
+      Array.isArray(parsed) &&
+      parsed.length > 1 &&
+      parsed[0] === "phone-auth" &&
+      parsed.every((screen): screen is Screen =>
+        FLOW.includes(screen as Screen),
+      )
+    ) {
+      return parsed
+    }
+  } catch (error) {
+    console.warn("[Onboarding] Could not restore saved progress:", error)
+  }
+
+  return ["phone-auth"]
+}
+
 function AppContent() {
-  const [history, setHistory] = useState<Screen[]>(["phone-auth"])
+  const [history, setHistory] = useState<Screen[]>(loadOnboardingHistory)
   const { isAuthenticated, isLoading, user, setDirectAuth, setAuthMode } = useAuth()
   const [showProfilePrompt, setShowProfilePrompt] = useState(false)
   const timerRef = useRef<any>(null)
   const hasTriggeredRef = useRef(false)
   const current = history[history.length - 1]
+
+  useEffect(() => {
+    try {
+      if (history.length > 1) {
+        sessionStorage.setItem(ONBOARDING_HISTORY_KEY, JSON.stringify(history))
+      } else {
+        sessionStorage.removeItem(ONBOARDING_HISTORY_KEY)
+      }
+    } catch (error) {
+      console.warn("[Onboarding] Could not save progress:", error)
+    }
+  }, [history])
 
   // Enforce default to login on initial page visit
   useEffect(() => {
