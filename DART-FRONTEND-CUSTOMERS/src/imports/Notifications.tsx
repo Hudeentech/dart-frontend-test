@@ -19,6 +19,8 @@ import {
   useNotifications,
   NotificationItem,
 } from "../context/NotificationContext"
+import CustomDeleteModal from "../components/CustomDeleteModal"
+import SwipeToDeleteItem from "../components/SwipeToDeleteItem"
 
 type Tab = "All" | "Delivery" | "System"
 
@@ -88,8 +90,20 @@ export default function Notifications({
   const [activeTab, setActiveTab] = useState<Tab>("All")
   const [filterUnreadOnly, setFilterUnreadOnly] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
-  const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [isHighlighted, setIsHighlighted] = useState(false)
+  const [deletePrompt, setDeletePrompt] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    itemCount?: number
+    confirmText?: string
+    onConfirm: () => void
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  })
 
   const {
     notifications,
@@ -97,6 +111,7 @@ export default function Notifications({
     markAllAsRead,
     markAsRead,
     clearNotifications,
+    deleteNotification,
     highlightTrigger,
   } = useNotifications()
 
@@ -109,10 +124,34 @@ export default function Notifications({
     }
   }, [highlightTrigger, embedded])
 
-  const handleClear = () => {
-    clearNotifications()
-    setShowClearConfirm(false)
+  const promptClearAll = () => {
     setShowMenu(false)
+    if (notifications.length === 0) return
+    setDeletePrompt({
+      isOpen: true,
+      title: "Clear all notifications?",
+      message: "Are you sure you want to remove all notifications from your list?",
+      itemCount: notifications.length,
+      confirmText: "Clear All",
+      onConfirm: () => {
+        clearNotifications()
+        setDeletePrompt((prev) => ({ ...prev, isOpen: false }))
+      },
+    })
+  }
+
+  const promptDeleteSingle = (id: string | number, title: string) => {
+    setDeletePrompt({
+      isOpen: true,
+      title: "Delete notification?",
+      message: `Are you sure you want to delete "${title || "this notification"}"?`,
+      itemCount: 1,
+      confirmText: "Delete",
+      onConfirm: () => {
+        deleteNotification(id)
+        setDeletePrompt((prev) => ({ ...prev, isOpen: false }))
+      },
+    })
   }
 
   const handleMarkAllAsRead = () => {
@@ -237,10 +276,7 @@ export default function Notifications({
                 </button>
                 <div className="h-px bg-gray-100 dark:bg-white/10 my-1"></div>
                 <button
-                  onClick={() => {
-                    setShowClearConfirm(true)
-                    setShowMenu(false)
-                  }}
+                  onClick={promptClearAll}
                   className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 cursor-pointer"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -311,37 +347,42 @@ export default function Notifications({
                     {todayItems.map((item) => {
                       const visual = getNotificationVisual(item)
                       return (
-                        <div
+                        <SwipeToDeleteItem
                           key={item.id}
-                          onClick={() => item.isUnread && markAsRead(item.id)}
-                          className={`flex gap-3 p-3.5 rounded-2xl transition-all relative border cursor-pointer ${
-                            item.isUnread
-                              ? "bg-yellow-50/70 dark:bg-yellow-400/10 border-yellow-200/50 dark:border-yellow-400/20 shadow-2xs"
-                              : "bg-gray-50/50 dark:bg-white/5 border-transparent hover:border-gray-200 dark:hover:border-white/10"
-                          }`}
+                          onDelete={() => promptDeleteSingle(item.id, item.title)}
+                          deleteLabel="Delete"
                         >
                           <div
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${visual.bg}`}
+                            onClick={() => item.isUnread && markAsRead(item.id)}
+                            className={`flex gap-3 p-3.5 rounded-2xl transition-all relative border cursor-pointer ${
+                              item.isUnread
+                                ? "bg-yellow-50/70 dark:bg-yellow-400/10 border-yellow-200/50 dark:border-yellow-400/20 shadow-2xs"
+                                : "bg-gray-50/50 dark:bg-white/5 border-transparent hover:border-gray-200 dark:hover:border-white/10"
+                            }`}
                           >
-                            {visual.icon}
-                          </div>
-                          <div className="flex-1 min-w-0 pr-2">
-                            <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
-                              {item.title}
-                            </p>
-                            {item.message && item.message !== item.title && (
-                              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
-                                {item.message}
+                            <div
+                              className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${visual.bg}`}
+                            >
+                              {visual.icon}
+                            </div>
+                            <div className="flex-1 min-w-0 pr-2">
+                              <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
+                                {item.title}
                               </p>
+                              {item.message && item.message !== item.title && (
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
+                                  {item.message}
+                                </p>
+                              )}
+                              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                                {item.time}
+                              </p>
+                            </div>
+                            {item.isUnread && (
+                              <div className="w-2 h-2 bg-yellow-500 rounded-full mt-1.5 shrink-0 animate-pulse"></div>
                             )}
-                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                              {item.time}
-                            </p>
                           </div>
-                          {item.isUnread && (
-                            <div className="w-2 h-2 bg-yellow-500 rounded-full mt-1.5 shrink-0 animate-pulse"></div>
-                          )}
-                        </div>
+                        </SwipeToDeleteItem>
                       )
                     })}
                   </div>
@@ -361,37 +402,42 @@ export default function Notifications({
                     {thisWeekItems.map((item) => {
                       const visual = getNotificationVisual(item)
                       return (
-                        <div
+                        <SwipeToDeleteItem
                           key={item.id}
-                          onClick={() => item.isUnread && markAsRead(item.id)}
-                          className={`flex gap-3 p-3.5 rounded-2xl transition-all border cursor-pointer ${
-                            item.isUnread
-                              ? "bg-yellow-50/70 dark:bg-yellow-400/10 border-yellow-200/50 dark:border-yellow-400/20 shadow-2xs"
-                              : "bg-gray-50/50 dark:bg-white/5 border-transparent hover:border-gray-200 dark:hover:border-white/10"
-                          }`}
+                          onDelete={() => promptDeleteSingle(item.id, item.title)}
+                          deleteLabel="Delete"
                         >
                           <div
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${visual.bg}`}
+                            onClick={() => item.isUnread && markAsRead(item.id)}
+                            className={`flex gap-3 p-3.5 rounded-2xl transition-all border cursor-pointer ${
+                              item.isUnread
+                                ? "bg-yellow-50/70 dark:bg-yellow-400/10 border-yellow-200/50 dark:border-yellow-400/20 shadow-2xs"
+                                : "bg-gray-50/50 dark:bg-white/5 border-transparent hover:border-gray-200 dark:hover:border-white/10"
+                            }`}
                           >
-                            {visual.icon}
-                          </div>
-                          <div className="flex-1 min-w-0 pr-2">
-                            <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
-                              {item.title}
-                            </p>
-                            {item.message && item.message !== item.title && (
-                              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
-                                {item.message}
+                            <div
+                              className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${visual.bg}`}
+                            >
+                              {visual.icon}
+                            </div>
+                            <div className="flex-1 min-w-0 pr-2">
+                              <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
+                                {item.title}
                               </p>
+                              {item.message && item.message !== item.title && (
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
+                                  {item.message}
+                                </p>
+                              )}
+                              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                                {item.time}
+                              </p>
+                            </div>
+                            {item.isUnread && (
+                              <div className="w-2 h-2 bg-yellow-500 rounded-full mt-1.5 shrink-0 animate-pulse"></div>
                             )}
-                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                              {item.time}
-                            </p>
                           </div>
-                          {item.isUnread && (
-                            <div className="w-2 h-2 bg-yellow-500 rounded-full mt-1.5 shrink-0 animate-pulse"></div>
-                          )}
-                        </div>
+                        </SwipeToDeleteItem>
                       )
                     })}
                   </div>
@@ -400,41 +446,16 @@ export default function Notifications({
             </div>
           )}
 
-          {/* Delete Confirmation Modal Overlay */}
-          {showClearConfirm && (
-            <div className="absolute inset-0 bg-black/60 z-50 flex items-end justify-center p-4">
-              <div className="bg-white dark:bg-[#202024] w-full rounded-2xl p-5 shadow-2xl animate-in slide-in-from-bottom border border-gray-100 dark:border-white/10">
-                <div className="flex justify-between items-start mb-2">
-                  <h2 className="text-base font-bold text-gray-900 dark:text-white">
-                    Clear notifications?
-                  </h2>
-                  <button
-                    onClick={() => setShowClearConfirm(false)}
-                    className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 rounded-full text-xs cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <p className="text-gray-500 dark:text-gray-400 mb-5 text-xs leading-relaxed">
-                  We'll remove all notifications from your list.
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowClearConfirm(false)}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/15 transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleClear}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Custom Delete Confirmation Modal */}
+          <CustomDeleteModal
+            isOpen={deletePrompt.isOpen}
+            title={deletePrompt.title}
+            message={deletePrompt.message}
+            itemCount={deletePrompt.itemCount}
+            confirmText={deletePrompt.confirmText}
+            onCancel={() => setDeletePrompt((prev) => ({ ...prev, isOpen: false }))}
+            onConfirm={deletePrompt.onConfirm}
+          />
         </div>
       </div>
     </div>

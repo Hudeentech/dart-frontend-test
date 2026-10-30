@@ -14,6 +14,8 @@ import {
   Loader2,
 } from "lucide-react"
 import { userApi } from "../api/user.api"
+import CustomDeleteModal from "../components/CustomDeleteModal"
+import SwipeToDeleteItem from "../components/SwipeToDeleteItem"
 
 interface SavedAddressProps {
   onBack: () => void
@@ -116,6 +118,20 @@ export default function SavedAddress({ onBack }: SavedAddressProps) {
     triggerToast("Default address updated")
   }
 
+  const [deletePrompt, setDeletePrompt] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    itemCount?: number
+    confirmText?: string
+    onConfirm: () => Promise<void> | void
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  })
+
   const handleDelete = async (id: string) => {
     try {
       await userApi.deleteAddress(id)
@@ -129,11 +145,22 @@ export default function SavedAddress({ onBack }: SavedAddressProps) {
     triggerToast("Address removed")
   }
 
-  const handleClearAll = async () => {
-    if (!window.confirm("Clear all saved addresses? This cannot be undone.")) {
-      return
-    }
+  const promptDeleteAddress = (id: string, label?: string) => {
+    setActiveMenuId(null)
+    setDeletePrompt({
+      isOpen: true,
+      title: "Delete saved address?",
+      message: `Are you sure you want to remove "${label || "this address"}" from your saved locations?`,
+      itemCount: 1,
+      confirmText: "Delete Address",
+      onConfirm: async () => {
+        setDeletePrompt((prev) => ({ ...prev, isOpen: false }))
+        await handleDelete(id)
+      },
+    })
+  }
 
+  const executeClearAll = async () => {
     setIsClearingAddresses(true)
     const results = await Promise.allSettled(
       addresses.map((address) => userApi.deleteAddress(address.id)),
@@ -153,6 +180,21 @@ export default function SavedAddress({ onBack }: SavedAddressProps) {
     } else {
       triggerToast("All saved addresses cleared")
     }
+  }
+
+  const promptClearAll = () => {
+    if (addresses.length === 0) return
+    setDeletePrompt({
+      isOpen: true,
+      title: "Clear all saved addresses?",
+      message: "Are you sure you want to clear all your saved locations? This cannot be undone.",
+      itemCount: addresses.length,
+      confirmText: "Clear All",
+      onConfirm: async () => {
+        setDeletePrompt((prev) => ({ ...prev, isOpen: false }))
+        await executeClearAll()
+      },
+    })
   }
 
   const handleFormSubmit = async (e: React.FormEvent) => {
@@ -264,7 +306,7 @@ export default function SavedAddress({ onBack }: SavedAddressProps) {
             {addresses.length > 0 && (
               <button
                 type="button"
-                onClick={handleClearAll}
+                onClick={promptClearAll}
                 disabled={isClearingAddresses}
                 className="text-xs font-semibold text-red-600 dark:text-red-400 hover:underline disabled:opacity-50"
               >
@@ -299,89 +341,94 @@ export default function SavedAddress({ onBack }: SavedAddressProps) {
               const isDefault = addr.isDefault
 
               return (
-                <div
+                <SwipeToDeleteItem
                   key={addr.id}
-                  className="p-4 sm:p-5 flex items-center justify-between hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors relative"
+                  onDelete={() => promptDeleteAddress(addr.id, addr.label)}
+                  deleteLabel="Delete"
                 >
-                  <div className="flex items-center gap-3.5 sm:gap-4 min-w-0 pr-2">
-                    {/* Icon */}
-                    <div className="w-11 h-11 rounded-2xl bg-gray-50 dark:bg-white/5 flex items-center justify-center text-gray-600 dark:text-gray-300 shrink-0">
-                      {addr.type === "home" && <Home className="w-5 h-5" />}
-                      {addr.type === "work" && (
-                        <Briefcase className="w-5 h-5" />
-                      )}
-                      {addr.type === "other" && <MapPin className="w-5 h-5" />}
-                    </div>
-
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-white truncate">
-                          {addr.label}
-                        </span>
-                        {isDefault && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFCC00] text-black uppercase tracking-wider shrink-0 shadow-2xs">
-                            DEFAULT
-                          </span>
+                  <div
+                    className="p-4 sm:p-5 flex items-center justify-between hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors relative"
+                  >
+                    <div className="flex items-center gap-3.5 sm:gap-4 min-w-0 pr-2">
+                      {/* Icon */}
+                      <div className="w-11 h-11 rounded-2xl bg-gray-50 dark:bg-white/5 flex items-center justify-center text-gray-600 dark:text-gray-300 shrink-0">
+                        {addr.type === "home" && <Home className="w-5 h-5" />}
+                        {addr.type === "work" && (
+                          <Briefcase className="w-5 h-5" />
                         )}
+                        {addr.type === "other" && <MapPin className="w-5 h-5" />}
                       </div>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                        {addr.address}, {addr.state}
-                      </span>
+
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-white truncate">
+                            {addr.label}
+                          </span>
+                          {isDefault && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFCC00] text-black uppercase tracking-wider shrink-0 shadow-2xs">
+                              DEFAULT
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                          {addr.address}, {addr.state}
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Three Dots Menu */}
-                  <div className="relative shrink-0">
-                    <button
-                      onClick={() =>
-                        setActiveMenuId(
-                          activeMenuId === addr.id ? null : addr.id,
-                        )
-                      }
-                      className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors cursor-pointer"
-                      aria-label="Address options"
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
+                    {/* Three Dots Menu */}
+                    <div className="relative shrink-0">
+                      <button
+                        onClick={() =>
+                          setActiveMenuId(
+                            activeMenuId === addr.id ? null : addr.id,
+                          )
+                        }
+                        className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors cursor-pointer"
+                        aria-label="Address options"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
 
-                    {/* Dropdown Menu */}
-                    {activeMenuId === addr.id && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-20"
-                          onClick={() => setActiveMenuId(null)}
-                        />
-                        <div className="absolute right-0 top-10 w-44 bg-white dark:bg-[#202024] rounded-2xl shadow-xl border border-gray-100 dark:border-white/10 py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
-                          {!isDefault && (
+                      {/* Dropdown Menu */}
+                      {activeMenuId === addr.id && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-20"
+                            onClick={() => setActiveMenuId(null)}
+                          />
+                          <div className="absolute right-0 top-10 w-44 bg-white dark:bg-[#202024] rounded-2xl shadow-xl border border-gray-100 dark:border-white/10 py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
+                            {!isDefault && (
+                              <button
+                                onClick={() => handleSetDefault(addr.id)}
+                                className="w-full px-4 py-2.5 text-left text-xs font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 cursor-pointer"
+                              >
+                                <Check className="w-3.5 h-3.5 text-amber-500" />
+                                Set as default
+                              </button>
+                            )}
+
                             <button
-                              onClick={() => handleSetDefault(addr.id)}
+                              onClick={() => openEditModal(addr)}
                               className="w-full px-4 py-2.5 text-left text-xs font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 cursor-pointer"
                             >
-                              <Check className="w-3.5 h-3.5 text-amber-500" />
-                              Set as default
+                              <Edit3 className="w-3.5 h-3.5 text-blue-500" />
+                              Edit address
                             </button>
-                          )}
 
-                          <button
-                            onClick={() => openEditModal(addr)}
-                            className="w-full px-4 py-2.5 text-left text-xs font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 cursor-pointer"
-                          >
-                            <Edit3 className="w-3.5 h-3.5 text-blue-500" />
-                            Edit address
-                          </button>
-
-                          <button
-                            onClick={() => handleDelete(addr.id)}
-                            className="w-full px-4 py-2.5 text-left text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            Delete address
-                          </button>
-                        </div>
-                      </>
-                    )}
+                            <button
+                              onClick={() => promptDeleteAddress(addr.id, addr.label)}
+                              className="w-full px-4 py-2.5 text-left text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete address
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </SwipeToDeleteItem>
               )
             })}
           </div>}
@@ -556,6 +603,16 @@ export default function SavedAddress({ onBack }: SavedAddressProps) {
           </div>
         </div>
       )}
+      {/* Custom Delete Confirmation Modal */}
+      <CustomDeleteModal
+        isOpen={deletePrompt.isOpen}
+        title={deletePrompt.title}
+        message={deletePrompt.message}
+        itemCount={deletePrompt.itemCount}
+        confirmText={deletePrompt.confirmText}
+        onCancel={() => setDeletePrompt((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={deletePrompt.onConfirm}
+      />
     </div>
   )
 }

@@ -98,6 +98,32 @@ export const deletePackageDraft = (id: string): void => {
 }
 
 /**
+ * Delete multiple drafts by their IDs
+ */
+export const deleteMultiplePackageDrafts = (ids: string[]): void => {
+  try {
+    const idSet = new Set(ids)
+    const drafts = getPackageDrafts().filter((d) => !idSet.has(d.id))
+    localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(drafts))
+    window.dispatchEvent(new Event("dart_drafts_updated"))
+  } catch (err) {
+    console.warn("[Drafts] Failed to delete multiple drafts:", err)
+  }
+}
+
+/**
+ * Clear all drafts
+ */
+export const clearAllPackageDrafts = (): void => {
+  try {
+    localStorage.removeItem(DRAFTS_STORAGE_KEY)
+    window.dispatchEvent(new Event("dart_drafts_updated"))
+  } catch (err) {
+    console.warn("[Drafts] Failed to clear all drafts:", err)
+  }
+}
+
+/**
  * Helper to get a user-friendly label for where they left off
  */
 export const getDraftStepLabel = (step: FlowScreen): string => {

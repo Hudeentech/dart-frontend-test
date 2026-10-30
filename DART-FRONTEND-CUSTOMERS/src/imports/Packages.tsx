@@ -1,5 +1,18 @@
 import { useState, useEffect } from "react"
-import { Plus, Search, ChevronRight, Package, Send, FileEdit, Trash2, ArrowRight } from "lucide-react"
+import {
+  Plus,
+  Search,
+  ChevronRight,
+  Package,
+  Send,
+  FileEdit,
+  Trash2,
+  ArrowRight,
+  CheckSquare,
+  Square,
+  Check,
+  CheckCheck,
+} from "lucide-react"
 import DeliveryDetails, { DeliveryDetailsItem } from "./DeliveryDetails"
 import SendPackageModal from "../components/SendPackageModal"
 import SendPackageFlow from "../components/SendPackageFlow"
@@ -8,12 +21,16 @@ import LinkInboundFlow, {
 } from "../components/LinkInboundFlow"
 import PackageStateIcon from "../components/PackageStateIcon"
 import ActiveDeliveryCard from "../components/ActiveDeliveryCard"
+import CustomDeleteModal from "../components/CustomDeleteModal"
+import SwipeToDeleteItem from "../components/SwipeToDeleteItem"
 import { ordersApi } from "../api/orders.api"
 import { packagesApi } from "../api/packages.api"
 import {
   PackageDraft,
   getPackageDrafts,
   deletePackageDraft,
+  deleteMultiplePackageDrafts,
+  clearAllPackageDrafts,
   getDraftStepLabel,
 } from "../utils/drafts"
 
@@ -62,28 +79,204 @@ export default function Packages({
     setIsSendingPackage(true)
   }
 
-  const handleDeleteDraft = (e: React.MouseEvent, id: string) => {
+  // Selection / Batch deletion state
+  const [isSelectMode, setIsSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  // Custom confirmation modal state
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    itemCount?: number
+    confirmText?: string
+    isLoading?: boolean
+    onConfirm: () => Promise<void> | void
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  })
+
+  // Clear selection when tab or filter switches
+  useEffect(() => {
+    setIsSelectMode(false)
+    setSelectedIds(new Set())
+  }, [activeTab, deliveryFilter])
+
+  const toggleSelectItem = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
-    deletePackageDraft(id)
-    setPackageDrafts(getPackageDrafts())
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
-  const handleDeletePackage = async (e: React.MouseEvent, item: DeliveryDetailsItem) => {
-    e.stopPropagation()
+  // 1. Prompt delete single draft
+  const promptDeleteDraft = (draft: PackageDraft) => {
+    setDeleteModal({
+      isOpen: true,
+      title: "Delete draft?",
+      message: `Are you sure you want to delete "${draft.packageName || "Untitled Package"}"? This action cannot be undone.`,
+      itemCount: 1,
+      confirmText: "Delete Draft",
+      onConfirm: () => {
+        deletePackageDraft(draft.id)
+        setPackageDrafts(getPackageDrafts())
+        setSelectedIds((prev) => {
+          const next = new Set(prev)
+          next.delete(draft.id)
+          return next
+        })
+        setDeleteModal((m) => ({ ...m, isOpen: false }))
+      },
+    })
+  }
+
+  // 2. Prompt delete all drafts
+  const promptDeleteAllDrafts = () => {
+    if (packageDrafts.length === 0) return
+    setDeleteModal({
+      isOpen: true,
+      title: "Delete all drafts?",
+      message: `Are you sure you want to delete all ${packageDrafts.length} unfinished package drafts? This action cannot be undone.`,
+      itemCount: packageDrafts.length,
+      confirmText: "Delete All",
+      onConfirm: () => {
+        clearAllPackageDrafts()
+        setPackageDrafts([])
+        setSelectedIds(new Set())
+        setIsSelectMode(false)
+        setDeleteModal((m) => ({ ...m, isOpen: false }))
+      },
+    })
+  }
+
+  // 3. Prompt delete single package
+  const promptDeletePackage = (item: DeliveryDetailsItem) => {
     if (item.status === "Pending" || item.status === "In-Transit" || item.status === "Ready for pickup") {
-      return // Never allow deleting pending or in-transit packages
+      return
     }
-    try {
-      if (!item.id) return
-      if (item.isInbound || deliveryFilter === "linked") {
-        await packagesApi.unlinkInboundPackage(item.id)
-        setLinkedDeliveries((prev) => prev.filter((p) => p.id !== item.id))
-      } else {
-        await ordersApi.deleteOrder(item.id)
-        setMyDeliveries((prev) => prev.filter((p) => p.id !== item.id))
-      }
-    } catch (err: any) {
-      console.error("[Packages] Delete package error:", err)
+    setDeleteModal({
+      isOpen: true,
+      title: "Delete package record?",
+      message: `Are you sure you want to delete "${item.title || "Package"}" from your history? This action cannot be undone.`,
+      itemCount: 1,
+      confirmText: "Delete",
+      onConfirm: async () => {
+        setDeleteModal((m) => ({ ...m, isLoading: true }))
+        try {
+          if (!item.id) return
+          if (item.isInbound || deliveryFilter === "linked") {
+            await packagesApi.unlinkInboundPackage(item.id)
+            setLinkedDeliveries((prev) => prev.filter((p) => p.id !== item.id))
+          } else {
+            await ordersApi.deleteOrder(item.id)
+            setMyDeliveries((prev) => prev.filter((p) => p.id !== item.id))
+          }
+        } catch (err: any) {
+          console.error("[Packages] Delete package error:", err)
+        }
+        setSelectedIds((prev) => {
+          const next = new Set(prev)
+          if (item.id) next.delete(item.id)
+          return next
+        })
+        setDeleteModal((m) => ({ ...m, isOpen: false, isLoading: false }))
+      },
+    })
+  }
+
+  // 4. Prompt delete all eligible packages
+  const promptDeleteAllPackages = (eligibleItems: DeliveryDetailsItem[]) => {
+    if (eligibleItems.length === 0) return
+    setDeleteModal({
+      isOpen: true,
+      title: "Delete all eligible shipments?",
+      message: `Are you sure you want to remove all ${eligibleItems.length} completed and cancelled shipments from your deliveries?`,
+      itemCount: eligibleItems.length,
+      confirmText: "Delete All",
+      onConfirm: async () => {
+        setDeleteModal((m) => ({ ...m, isLoading: true }))
+        const idsToDelete = eligibleItems.map((i) => i.id)
+        for (const item of eligibleItems) {
+          if (!item.id) continue
+          try {
+            if (item.isInbound || deliveryFilter === "linked") {
+              await packagesApi.unlinkInboundPackage(item.id)
+            } else {
+              await ordersApi.deleteOrder(item.id)
+            }
+          } catch (err) {
+            console.error("Error clearing package:", item.id, err)
+          }
+        }
+        const idSet = new Set(idsToDelete.filter(Boolean))
+        if (deliveryFilter === "linked") {
+          setLinkedDeliveries((prev) => prev.filter((p) => !p.id || !idSet.has(p.id)))
+        } else {
+          setMyDeliveries((prev) => prev.filter((p) => !p.id || !idSet.has(p.id)))
+        }
+        setSelectedIds(new Set())
+        setIsSelectMode(false)
+        setDeleteModal((m) => ({ ...m, isOpen: false, isLoading: false }))
+      },
+    })
+  }
+
+  // 5. Prompt delete selected items (drafts or packages)
+  const promptDeleteSelected = () => {
+    if (selectedIds.size === 0) return
+
+    if (activeTab === "Draft") {
+      setDeleteModal({
+        isOpen: true,
+        title: `Delete ${selectedIds.size} draft${selectedIds.size > 1 ? "s" : ""}?`,
+        message: "Are you sure you want to delete the selected package drafts? This cannot be undone.",
+        itemCount: selectedIds.size,
+        confirmText: `Delete (${selectedIds.size})`,
+        onConfirm: () => {
+          deleteMultiplePackageDrafts(Array.from(selectedIds))
+          setPackageDrafts(getPackageDrafts())
+          setSelectedIds(new Set())
+          setIsSelectMode(false)
+          setDeleteModal((m) => ({ ...m, isOpen: false }))
+        },
+      })
+    } else {
+      setDeleteModal({
+        isOpen: true,
+        title: `Delete ${selectedIds.size} package${selectedIds.size > 1 ? "s" : ""}?`,
+        message: "Are you sure you want to delete the selected package records from your list?",
+        itemCount: selectedIds.size,
+        confirmText: `Delete (${selectedIds.size})`,
+        onConfirm: async () => {
+          setDeleteModal((m) => ({ ...m, isLoading: true }))
+          const idsToDelete = Array.from(selectedIds)
+          for (const id of idsToDelete) {
+            try {
+              if (deliveryFilter === "linked") {
+                await packagesApi.unlinkInboundPackage(id)
+              } else {
+                await ordersApi.deleteOrder(id)
+              }
+            } catch (err) {
+              console.error("Failed to delete package:", id, err)
+            }
+          }
+          if (deliveryFilter === "linked") {
+            setLinkedDeliveries((prev) => prev.filter((p) => !p.id || !selectedIds.has(p.id)))
+          } else {
+            setMyDeliveries((prev) => prev.filter((p) => !p.id || !selectedIds.has(p.id)))
+          }
+          setSelectedIds(new Set())
+          setIsSelectMode(false)
+          setDeleteModal((m) => ({ ...m, isOpen: false, isLoading: false }))
+        },
+      })
     }
   }
 
@@ -542,63 +735,196 @@ export default function Packages({
                 </div>
               )
             }
+
+            const allDraftsSelected = packageDrafts.length > 0 && packageDrafts.every((d) => selectedIds.has(d.id))
+
+            const handleToggleSelectAllDrafts = () => {
+              if (allDraftsSelected) {
+                setSelectedIds(new Set())
+              } else {
+                setSelectedIds(new Set(packageDrafts.map((d) => d.id)))
+              }
+            }
+
             return (
               <div className="space-y-3.5 w-full">
-                {packageDrafts.map((draft) => (
-                  <div
-                    key={draft.id}
-                    onClick={() => handleResumeDraft(draft)}
-                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-gray-50 dark:bg-[#1c1c20] rounded-2xl cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors duration-200 gap-3.5 sm:gap-3.5 w-full group touch-manipulation"
-                  >
-                    <div className="flex items-start gap-3 min-w-0 w-full sm:flex-1">
-                      <div className="w-11 h-11 rounded-xl bg-gray-200/70 dark:bg-white/10 text-gray-600 dark:text-gray-300 shrink-0 flex items-center justify-center">
-                        <FileEdit className="w-5 h-5" />
-                      </div>
+                {/* Draft Management Toolbar */}
+                <div className="flex items-center justify-between gap-2 py-1 px-1">
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
+                    <span>💡</span>
+                    <span>Swipe left on any draft or mark to delete</span>
+                  </span>
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-gray-200 text-gray-700 dark:bg-white/10 dark:text-gray-300 inline-block">
-                            Draft
-                          </span>
-                          <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium truncate">
-                            {getDraftStepLabel(draft.step)}
-                          </span>
-                        </div>
-                        <h4 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base truncate">
-                          {draft.packageName || "Untitled Package"}
-                        </h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
-                          {draft.fromLocation} → {draft.toLocation}
-                        </p>
-                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                          Saved {draft.dateFormatted || "Recently"}
-                        </p>
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSelectMode(!isSelectMode)
+                        if (isSelectMode) setSelectedIds(new Set())
+                      }}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
+                        isSelectMode
+                          ? "bg-gray-900 text-white dark:bg-white dark:text-black font-semibold"
+                          : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10"
+                      }`}
+                    >
+                      {isSelectMode ? "Done" : "Mark to delete"}
+                    </button>
 
-                    <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto pl-14 sm:pl-0">
+                    {!isSelectMode && (
                       <button
                         type="button"
-                        onClick={(e) => handleDeleteDraft(e, draft.id)}
-                        className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 dark:text-gray-400 dark:hover:bg-red-500/10 transition-colors cursor-pointer"
-                        title="Delete draft"
+                        onClick={promptDeleteAllDrafts}
+                        className="text-xs px-2.5 py-1 rounded-lg font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors flex items-center gap-1 cursor-pointer"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete all</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Batch Selection Banner */}
+                {isSelectMode && (
+                  <div className="bg-yellow-50 dark:bg-yellow-400/10 border border-yellow-200/80 dark:border-yellow-400/20 rounded-2xl p-3 flex items-center justify-between gap-3 animate-in fade-in duration-150">
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={handleToggleSelectAllDrafts}
+                        className="text-xs font-semibold text-gray-800 dark:text-gray-200 hover:text-black dark:hover:text-white flex items-center gap-1.5 cursor-pointer"
+                      >
+                        {allDraftsSelected ? (
+                          <CheckSquare className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                        ) : (
+                          <Square className="w-4 h-4 text-gray-400" />
+                        )}
+                        <span>{allDraftsSelected ? "Deselect all" : "Select all"}</span>
+                      </button>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        ({selectedIds.size} selected)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSelectMode(false)
+                          setSelectedIds(new Set())
+                        }}
+                        className="text-xs px-2.5 py-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+                      >
+                        Cancel
                       </button>
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleResumeDraft(draft)
-                        }}
-                        className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-200 text-white dark:text-gray-900 font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors cursor-pointer active:scale-[0.98] touch-manipulation"
+                        disabled={selectedIds.size === 0}
+                        onClick={promptDeleteSelected}
+                        className="text-xs px-3 py-1 rounded-xl font-bold bg-red-500 hover:bg-red-600 text-white disabled:opacity-40 transition-colors cursor-pointer shadow-xs"
                       >
-                        <span>Continue draft</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
+                        Delete ({selectedIds.size})
                       </button>
                     </div>
                   </div>
-                ))}
+                )}
+
+                {packageDrafts.map((draft) => {
+                  const isSelected = selectedIds.has(draft.id)
+                  return (
+                    <SwipeToDeleteItem
+                      key={draft.id}
+                      disabled={isSelectMode}
+                      onDelete={() => promptDeleteDraft(draft)}
+                      deleteLabel="Delete"
+                    >
+                      <div
+                        onClick={() => {
+                          if (isSelectMode) {
+                            toggleSelectItem({ stopPropagation: () => {} } as any, draft.id)
+                          } else {
+                            handleResumeDraft(draft)
+                          }
+                        }}
+                        className={`flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-gray-50 dark:bg-[#1c1c20] rounded-2xl cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors duration-200 gap-3.5 sm:gap-3.5 w-full group touch-manipulation border ${
+                          isSelected
+                            ? "border-yellow-400 ring-2 ring-yellow-400/40"
+                            : "border-transparent"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3 min-w-0 w-full sm:flex-1">
+                          {isSelectMode && (
+                            <div
+                              onClick={(e) => toggleSelectItem(e, draft.id)}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-yellow-600 dark:text-yellow-400 cursor-pointer"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="w-5 h-5 fill-yellow-400 text-black stroke-[2]" />
+                              ) : (
+                                <Square className="w-5 h-5 text-gray-400" />
+                              )}
+                            </div>
+                          )}
+
+                          <div className="w-11 h-11 rounded-xl bg-gray-200/70 dark:bg-white/10 text-gray-600 dark:text-gray-300 shrink-0 flex items-center justify-center">
+                            <FileEdit className="w-5 h-5" />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-gray-200 text-gray-700 dark:bg-white/10 dark:text-gray-300 inline-block">
+                                Draft
+                              </span>
+                              <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium truncate">
+                                {getDraftStepLabel(draft.step)}
+                              </span>
+                            </div>
+                            <h4 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base truncate">
+                              {draft.packageName || "Untitled Package"}
+                            </h4>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+                              {draft.fromLocation} → {draft.toLocation}
+                            </p>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                              Saved {draft.dateFormatted || "Recently"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto pl-14 sm:pl-0">
+                          {!isSelectMode && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                promptDeleteDraft(draft)
+                              }}
+                              className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 dark:text-gray-400 dark:hover:bg-red-500/10 transition-colors cursor-pointer"
+                              title="Delete draft"
+                              aria-label="Delete draft"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (isSelectMode) {
+                                toggleSelectItem(e, draft.id)
+                              } else {
+                                handleResumeDraft(draft)
+                              }
+                            }}
+                            className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-200 text-white dark:text-gray-900 font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors cursor-pointer active:scale-[0.98] touch-manipulation"
+                          >
+                            <span>Continue draft</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </SwipeToDeleteItem>
+                  )
+                })}
               </div>
             )
           }
@@ -629,56 +955,207 @@ export default function Packages({
             )
           }
 
+          const deletableItems = filteredList.filter(
+            (item): item is DeliveryDetailsItem & { id: string } =>
+              Boolean(item.id) &&
+              item.status !== "In-Transit" &&
+              item.status !== "Pending" &&
+              item.status !== "Ready for pickup"
+          )
+          const allDeletableSelected =
+            deletableItems.length > 0 && deletableItems.every((d) => selectedIds.has(d.id))
+
+          const handleToggleSelectAllPackages = () => {
+            if (allDeletableSelected) {
+              setSelectedIds(new Set())
+            } else {
+              setSelectedIds(new Set(deletableItems.map((d) => d.id)))
+            }
+          }
+
           return (
             <div className="space-y-4 w-full">
-              {filteredList.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => setSelectedDelivery(item)}
-                  className="flex items-center justify-between p-3.5 sm:p-4 bg-white dark:bg-[#1c1c20] hover:bg-yellow-50/80 dark:hover:bg-yellow-400/10 border border-gray-100 dark:border-white/5 hover:border-yellow-300/80 dark:hover:border-yellow-400/30 rounded-2xl cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 gap-3 sm:gap-3.5 w-full group touch-manipulation"
-                >
-                  <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 shrink-0 flex items-center justify-center p-1.5">
-                    <PackageStateIcon
-                      status={item.status}
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-1.5 inline-block ${
-                        item.status === "Delivered"
-                          ? "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-400/10"
-                          : item.status === "In-Transit" ||
-                              item.status === "Ready for pickup"
-                            ? "text-yellow-700 dark:text-yellow-400 bg-yellow-400/20"
-                            : "text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-400/10"
+              {/* Package Management Toolbar (if deletable items exist) */}
+              {deletableItems.length > 0 && (
+                <div className="flex items-center justify-between gap-2 py-1 px-1">
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
+                    <span>💡</span>
+                    <span>Swipe left on recent deliveries to delete</span>
+                  </span>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSelectMode(!isSelectMode)
+                        if (isSelectMode) setSelectedIds(new Set())
+                      }}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
+                        isSelectMode
+                          ? "bg-gray-900 text-white dark:bg-white dark:text-black font-semibold"
+                          : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10"
                       }`}
                     >
-                      {item.status || "DELIVERED"}
-                    </span>
-                    <h4 className="font-semibold text-gray-900 dark:text-white truncate">
-                      {item.title}
-                    </h4>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                      {item.fromLocation ? `From ${item.fromLocation} • ` : ""}
-                      {item.date} {item.time}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                    {item.status !== "In-Transit" && item.status !== "Pending" && item.status !== "Ready for pickup" && (
+                      {isSelectMode ? "Done" : "Mark to delete"}
+                    </button>
+
+                    {!isSelectMode && (
                       <button
                         type="button"
-                        onClick={(e) => handleDeletePackage(e, item)}
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors cursor-pointer"
-                        title="Delete package"
+                        onClick={() => promptDeleteAllPackages(deletableItems)}
+                        className="text-xs px-2.5 py-1 rounded-lg font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors flex items-center gap-1 cursor-pointer"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Clear all</span>
                       </button>
                     )}
-                    <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-gray-800 dark:group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
                   </div>
                 </div>
-              ))}
+              )}
+
+              {/* Batch Selection Banner */}
+              {isSelectMode && deletableItems.length > 0 && (
+                <div className="bg-yellow-50 dark:bg-yellow-400/10 border border-yellow-200/80 dark:border-yellow-400/20 rounded-2xl p-3 flex items-center justify-between gap-3 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={handleToggleSelectAllPackages}
+                      className="text-xs font-semibold text-gray-800 dark:text-gray-200 hover:text-black dark:hover:text-white flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {allDeletableSelected ? (
+                        <CheckSquare className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                      ) : (
+                        <Square className="w-4 h-4 text-gray-400" />
+                      )}
+                      <span>{allDeletableSelected ? "Deselect all" : "Select all"}</span>
+                    </button>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      ({selectedIds.size} selected)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSelectMode(false)
+                        setSelectedIds(new Set())
+                      }}
+                      className="text-xs px-2.5 py-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={selectedIds.size === 0}
+                      onClick={promptDeleteSelected}
+                      className="text-xs px-3 py-1 rounded-xl font-bold bg-red-500 hover:bg-red-600 text-white disabled:opacity-40 transition-colors cursor-pointer shadow-xs"
+                    >
+                      Delete ({selectedIds.size})
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {filteredList.map((item) => {
+                const isDeletable =
+                  item.status !== "In-Transit" &&
+                  item.status !== "Pending" &&
+                  item.status !== "Ready for pickup"
+                const isSelected = Boolean(item.id && selectedIds.has(item.id))
+
+                const rowContent = (
+                  <div
+                    onClick={() => {
+                      if (isSelectMode && isDeletable && item.id) {
+                        toggleSelectItem({ stopPropagation: () => {} } as any, item.id)
+                      } else {
+                        setSelectedDelivery(item)
+                      }
+                    }}
+                    className={`flex items-center justify-between p-3.5 sm:p-4 bg-white dark:bg-[#1c1c20] hover:bg-yellow-50/80 dark:hover:bg-yellow-400/10 border ${
+                      isSelected
+                        ? "border-yellow-400 ring-2 ring-yellow-400/40"
+                        : "border-gray-100 dark:border-white/5 hover:border-yellow-300/80 dark:hover:border-yellow-400/30"
+                    } rounded-2xl cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 gap-3 sm:gap-3.5 w-full group touch-manipulation`}
+                  >
+                    {isSelectMode && isDeletable && item.id && (
+                      <div
+                        onClick={(e) => toggleSelectItem(e, item.id!)}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-yellow-600 dark:text-yellow-400 cursor-pointer"
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="w-5 h-5 fill-yellow-400 text-black stroke-[2]" />
+                        ) : (
+                          <Square className="w-5 h-5 text-gray-400" />
+                        )}
+                      </div>
+                    )}
+
+                    <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 shrink-0 flex items-center justify-center p-1.5">
+                      <PackageStateIcon
+                        status={item.status}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-1.5 inline-block ${
+                          item.status === "Delivered"
+                            ? "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-400/10"
+                            : item.status === "In-Transit" ||
+                                item.status === "Ready for pickup"
+                              ? "text-yellow-700 dark:text-yellow-400 bg-yellow-400/20"
+                              : "text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-400/10"
+                        }`}
+                      >
+                        {item.status || "DELIVERED"}
+                      </span>
+                      <h4 className="font-semibold text-gray-900 dark:text-white truncate">
+                        {item.title}
+                      </h4>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                        {item.fromLocation ? `From ${item.fromLocation} • ` : ""}
+                        {item.date} {item.time}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                      {!isSelectMode && isDeletable && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            promptDeletePackage(item)
+                          }}
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors cursor-pointer"
+                          title="Delete package"
+                          aria-label="Delete package"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-gray-800 dark:group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
+                    </div>
+                  </div>
+                )
+
+                if (isDeletable) {
+                  return (
+                    <SwipeToDeleteItem
+                      key={item.id}
+                      disabled={isSelectMode}
+                      onDelete={() => promptDeletePackage(item)}
+                      deleteLabel="Delete"
+                    >
+                      {rowContent}
+                    </SwipeToDeleteItem>
+                  )
+                }
+
+                return <div key={item.id}>{rowContent}</div>
+              })}
             </div>
           )
         })()}
@@ -692,6 +1169,18 @@ export default function Packages({
           setIsSendModalOpen(false)
           setIsSendingPackage(true)
         }}
+      />
+
+      {/* Reusable Custom Delete Confirmation Prompt */}
+      <CustomDeleteModal
+        isOpen={deleteModal.isOpen}
+        title={deleteModal.title}
+        message={deleteModal.message}
+        itemCount={deleteModal.itemCount}
+        confirmText={deleteModal.confirmText}
+        isLoading={deleteModal.isLoading}
+        onConfirm={deleteModal.onConfirm}
+        onClose={() => setDeleteModal((m) => ({ ...m, isOpen: false }))}
       />
     </div>
   )

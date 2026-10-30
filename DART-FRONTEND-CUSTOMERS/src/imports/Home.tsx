@@ -31,6 +31,8 @@ import ActiveDeliveryCard from "../components/ActiveDeliveryCard"
 import NotificationButton from "../components/NotificationButton"
 import emptyStateBoxSvg from "../assets/empty-state-box.svg"
 import VerificationRequiredModal from "../components/VerificationRequiredModal"
+import CustomDeleteModal from "../components/CustomDeleteModal"
+import SwipeToDeleteItem from "../components/SwipeToDeleteItem"
 import { ordersApi } from "../api/orders.api"
 import { packagesApi } from "../api/packages.api"
 import { userApi } from "../api/user.api"
@@ -168,10 +170,17 @@ export default function Home({
     setIsSendingPackage(true)
   }
 
-  const handleDeleteDraft = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation()
-    deletePackageDraft(id)
+  const [draftToDelete, setDraftToDelete] = useState<PackageDraft | null>(null)
+
+  const promptDeleteDraft = (draft: PackageDraft) => {
+    setDraftToDelete(draft)
+  }
+
+  const handleConfirmDeleteDraft = () => {
+    if (!draftToDelete) return
+    deletePackageDraft(draftToDelete.id)
     setPackageDrafts(getPackageDrafts())
+    setDraftToDelete(null)
   }
 
   const handleSendPackageClick = () => {
@@ -919,58 +928,67 @@ export default function Home({
                 </div>
               ) : (
                 packageDrafts.map((draft) => (
-                  <div
+                  <SwipeToDeleteItem
                     key={draft.id}
-                    onClick={() => handleResumeDraft(draft)}
-                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-gray-50 dark:bg-[#1c1c20] rounded-2xl cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors duration-200 gap-3.5 sm:gap-3.5 group touch-manipulation"
+                    onDelete={() => promptDeleteDraft(draft)}
+                    deleteLabel="Delete"
                   >
-                    <div className="flex items-start gap-3 min-w-0 w-full sm:flex-1">
-                      <div className="w-11 h-11 rounded-xl bg-gray-200/70 dark:bg-white/10 text-gray-600 dark:text-gray-300 shrink-0 flex items-center justify-center">
-                        <FileEdit className="w-5 h-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-gray-200 text-gray-700 dark:bg-white/10 dark:text-gray-300 inline-block">
-                            Draft
-                          </span>
-                          <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium truncate">
-                            {getDraftStepLabel(draft.step)}
-                          </span>
+                    <div
+                      onClick={() => handleResumeDraft(draft)}
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-gray-50 dark:bg-[#1c1c20] rounded-2xl cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors duration-200 gap-3.5 sm:gap-3.5 group touch-manipulation"
+                    >
+                      <div className="flex items-start gap-3 min-w-0 w-full sm:flex-1">
+                        <div className="w-11 h-11 rounded-xl bg-gray-200/70 dark:bg-white/10 text-gray-600 dark:text-gray-300 shrink-0 flex items-center justify-center">
+                          <FileEdit className="w-5 h-5" />
                         </div>
-                        <h4 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base truncate">
-                          {draft.packageName || "Untitled Package"}
-                        </h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
-                          {draft.fromLocation} → {draft.toLocation}
-                        </p>
-                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                          Saved {draft.dateFormatted || "Recently"}
-                        </p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-gray-200 text-gray-700 dark:bg-white/10 dark:text-gray-300 inline-block">
+                              Draft
+                            </span>
+                            <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium truncate">
+                              {getDraftStepLabel(draft.step)}
+                            </span>
+                          </div>
+                          <h4 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base truncate">
+                            {draft.packageName || "Untitled Package"}
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+                            {draft.fromLocation} → {draft.toLocation}
+                          </p>
+                          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                            Saved {draft.dateFormatted || "Recently"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto pl-14 sm:pl-0">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            promptDeleteDraft(draft)
+                          }}
+                          className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 dark:text-gray-400 dark:hover:bg-red-500/10 transition-colors cursor-pointer"
+                          title="Delete draft"
+                          aria-label="Delete draft"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleResumeDraft(draft)
+                          }}
+                          className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-200 text-white dark:text-gray-900 font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors cursor-pointer active:scale-[0.98] touch-manipulation"
+                        >
+                          <span>Continue draft</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto pl-14 sm:pl-0">
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteDraft(e, draft.id)}
-                        className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 dark:text-gray-400 dark:hover:bg-red-500/10 transition-colors cursor-pointer"
-                        title="Delete draft"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleResumeDraft(draft)
-                        }}
-                        className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-200 text-white dark:text-gray-900 font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors cursor-pointer active:scale-[0.98] touch-manipulation"
-                      >
-                        <span>Continue draft</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
+                  </SwipeToDeleteItem>
                 ))
               )
             ) : recentDeliveries.length === 0 ? (
@@ -1184,6 +1202,14 @@ export default function Home({
           }
           setPendingAction(null)
         }}
+      />
+      <CustomDeleteModal
+        isOpen={Boolean(draftToDelete)}
+        title="Delete draft?"
+        message={`Are you sure you want to delete "${draftToDelete?.packageName || "Untitled Package"}"? This action cannot be undone.`}
+        confirmText="Delete Draft"
+        onConfirm={handleConfirmDeleteDraft}
+        onClose={() => setDraftToDelete(null)}
       />
     </div>
   )

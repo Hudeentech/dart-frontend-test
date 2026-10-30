@@ -10,6 +10,8 @@ import {
   MoreVertical,
   Building,
 } from "lucide-react"
+import CustomDeleteModal from "../../components/CustomDeleteModal"
+import SwipeToDeleteItem from "../../components/SwipeToDeleteItem"
 import { walletApi } from "../../api/account.api"
 import { useAuth } from "../../context/AuthContext"
 import { fullName } from "../../utils/format"
@@ -42,6 +44,19 @@ export default function PaymentMethod({ onBack }: PaymentMethodProps) {
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState<boolean>(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [deletePrompt, setDeletePrompt] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    itemCount?: number
+    confirmText?: string
+    onConfirm: () => void
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  })
 
   // Add Bank State
   const [bankName, setBankName] = useState("Guaranty Trust Bank")
@@ -70,10 +85,20 @@ export default function PaymentMethod({ onBack }: PaymentMethodProps) {
     triggerToast("Default settlement method updated")
   }
 
-  const handleDelete = (id: string) => {
+  const promptDeleteMethod = (method: SettlementMethod) => {
     setActiveMenuId(null)
-    setMethods((prev) => prev.filter((m) => m.id !== id))
-    triggerToast("Settlement account removed")
+    setDeletePrompt({
+      isOpen: true,
+      title: "Remove bank account?",
+      message: `Are you sure you want to remove ${method.title} (${method.subtitle}) as a settlement method?`,
+      itemCount: 1,
+      confirmText: "Remove Account",
+      onConfirm: () => {
+        setDeletePrompt((prev) => ({ ...prev, isOpen: false }))
+        setMethods((prev) => prev.filter((m) => m.id !== method.id))
+        triggerToast("Settlement account removed")
+      },
+    })
   }
 
   const handleAddAccount = (e: React.FormEvent) => {
@@ -161,9 +186,8 @@ export default function PaymentMethod({ onBack }: PaymentMethodProps) {
           {methods.map((method) => {
             const isWallet = method.type === "wallet"
 
-            return (
+            const content = (
               <div
-                key={method.id}
                 className="p-4 sm:p-5 flex items-center justify-between hover:bg-gray-50/80 dark:hover:bg-white/[0.03] transition-colors relative"
               >
                 <div className="flex items-center gap-4">
@@ -217,7 +241,7 @@ export default function PaymentMethod({ onBack }: PaymentMethodProps) {
                         )}
                         <button
                           type="button"
-                          onClick={() => handleDelete(method.id)}
+                          onClick={() => promptDeleteMethod(method)}
                           className="w-full px-4 py-2 text-left text-xs font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 flex items-center gap-2"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -228,6 +252,20 @@ export default function PaymentMethod({ onBack }: PaymentMethodProps) {
                   </div>
                 )}
               </div>
+            )
+
+            if (isWallet) {
+              return <div key={method.id}>{content}</div>
+            }
+
+            return (
+              <SwipeToDeleteItem
+                key={method.id}
+                onDelete={() => promptDeleteMethod(method)}
+                deleteLabel="Delete"
+              >
+                {content}
+              </SwipeToDeleteItem>
             )
           })}
         </div>
@@ -314,6 +352,16 @@ export default function PaymentMethod({ onBack }: PaymentMethodProps) {
           </div>
         </div>
       )}
+      {/* Custom Delete Confirmation Modal */}
+      <CustomDeleteModal
+        isOpen={deletePrompt.isOpen}
+        title={deletePrompt.title}
+        message={deletePrompt.message}
+        itemCount={deletePrompt.itemCount}
+        confirmText={deletePrompt.confirmText}
+        onCancel={() => setDeletePrompt((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={deletePrompt.onConfirm}
+      />
     </div>
   )
 }

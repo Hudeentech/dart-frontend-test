@@ -9,6 +9,8 @@ import {
   MoreVertical,
   Navigation,
 } from "lucide-react"
+import CustomDeleteModal from "../../components/CustomDeleteModal"
+import SwipeToDeleteItem from "../../components/SwipeToDeleteItem"
 
 interface SavedAddressProps {
   onBack: () => void
@@ -43,6 +45,19 @@ export default function SavedAddress({ onBack }: SavedAddressProps) {
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [deletePrompt, setDeletePrompt] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    itemCount?: number
+    confirmText?: string
+    onConfirm: () => void
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  })
 
   // Form State
   const [hubLabel, setHubLabel] = useState("Central Abuja")
@@ -65,10 +80,20 @@ export default function SavedAddress({ onBack }: SavedAddressProps) {
     triggerToast("Primary operating location updated")
   }
 
-  const handleDelete = (id: string) => {
+  const promptDeleteHub = (hub: HubItem) => {
     setActiveMenuId(null)
-    setHubs((prev) => prev.filter((h) => h.id !== id))
-    triggerToast("Location removed")
+    setDeletePrompt({
+      isOpen: true,
+      title: "Delete operating hub?",
+      message: `Are you sure you want to remove "${hub.label}" (${hub.address}) from your operating hubs?`,
+      itemCount: 1,
+      confirmText: "Delete Hub",
+      onConfirm: () => {
+        setDeletePrompt((prev) => ({ ...prev, isOpen: false }))
+        setHubs((prev) => prev.filter((h) => h.id !== hub.id))
+        triggerToast("Location removed")
+      },
+    })
   }
 
   const handleAddHub = (e: React.FormEvent) => {
@@ -150,66 +175,71 @@ export default function SavedAddress({ onBack }: SavedAddressProps) {
         {/* Hubs List */}
         <div className="bg-white dark:bg-[#1c1c20] border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden divide-y divide-gray-50 dark:divide-white/5 transition-colors">
           {hubs.map((hub) => (
-            <div
+            <SwipeToDeleteItem
               key={hub.id}
-              className="p-4 sm:p-5 flex items-center justify-between hover:bg-gray-50/80 dark:hover:bg-white/[0.03] transition-colors relative"
+              onDelete={() => promptDeleteHub(hub)}
+              deleteLabel="Delete"
             >
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-full bg-gray-50 dark:bg-white/5 flex items-center justify-center text-gray-600 dark:text-gray-300 shrink-0 border border-gray-100 dark:border-white/10">
-                  <MapPin className="w-5 h-5 text-amber-500 stroke-[1.8]" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-semibold text-sm text-gray-900 dark:text-white">
-                      {hub.label}
-                    </h4>
-                    {hub.isDefault && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-400/20 text-yellow-700 dark:text-yellow-400 border border-yellow-400/30 uppercase">
-                        Active Hub
-                      </span>
-                    )}
+              <div
+                className="p-4 sm:p-5 flex items-center justify-between hover:bg-gray-50/80 dark:hover:bg-white/[0.03] transition-colors relative"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-gray-50 dark:bg-white/5 flex items-center justify-center text-gray-600 dark:text-gray-300 shrink-0 border border-gray-100 dark:border-white/10">
+                    <MapPin className="w-5 h-5 text-amber-500 stroke-[1.8]" />
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    {hub.address} · Coverage: {hub.radius}
-                  </p>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold text-sm text-gray-900 dark:text-white">
+                        {hub.label}
+                      </h4>
+                      {hub.isDefault && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-400/20 text-yellow-700 dark:text-yellow-400 border border-yellow-400/30 uppercase">
+                          Active Hub
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      {hub.address} · Coverage: {hub.radius}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setActiveMenuId(activeMenuId === hub.id ? null : hub.id)
-                  }
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-white"
-                >
-                  <MoreVertical className="w-4 h-4" />
-                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActiveMenuId(activeMenuId === hub.id ? null : hub.id)
+                    }
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-white"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
 
-                {activeMenuId === hub.id && (
-                  <div className="absolute right-0 top-10 w-44 bg-white dark:bg-[#1a1a1e] rounded-2xl shadow-xl border border-gray-100 dark:border-white/10 py-1.5 z-20 animate-in fade-in duration-150">
-                    {!hub.isDefault && (
+                  {activeMenuId === hub.id && (
+                    <div className="absolute right-0 top-10 w-44 bg-white dark:bg-[#1a1a1e] rounded-2xl shadow-xl border border-gray-100 dark:border-white/10 py-1.5 z-20 animate-in fade-in duration-150">
+                      {!hub.isDefault && (
+                        <button
+                          type="button"
+                          onClick={() => handleSetDefault(hub.id)}
+                          className="w-full px-4 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2"
+                        >
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          Set as Active Base
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => handleSetDefault(hub.id)}
-                        className="w-full px-4 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2"
+                        onClick={() => promptDeleteHub(hub)}
+                        className="w-full px-4 py-2 text-left text-xs font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 flex items-center gap-2"
                       >
-                        <Check className="w-3.5 h-3.5 text-emerald-500" />
-                        Set as Active Base
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(hub.id)}
-                      className="w-full px-4 py-2 text-left text-xs font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 flex items-center gap-2"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Delete
-                    </button>
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            </SwipeToDeleteItem>
           ))}
         </div>
       </div>
@@ -296,6 +326,16 @@ export default function SavedAddress({ onBack }: SavedAddressProps) {
           </div>
         </div>
       )}
+      {/* Custom Delete Confirmation Modal */}
+      <CustomDeleteModal
+        isOpen={deletePrompt.isOpen}
+        title={deletePrompt.title}
+        message={deletePrompt.message}
+        itemCount={deletePrompt.itemCount}
+        confirmText={deletePrompt.confirmText}
+        onCancel={() => setDeletePrompt((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={deletePrompt.onConfirm}
+      />
     </div>
   )
 }

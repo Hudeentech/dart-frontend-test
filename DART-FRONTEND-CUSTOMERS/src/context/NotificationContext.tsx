@@ -100,6 +100,7 @@ interface NotificationContextType {
   markAllAsRead: () => void
   markAsRead: (id: string | number) => void
   clearNotifications: () => void
+  deleteNotification: (id: string | number) => void
   addNotification: (item: Omit<NotificationItem, "id">) => void
   refreshNotifications: () => Promise<void>
 }
@@ -221,6 +222,10 @@ export function NotificationProvider({
     }
   }
 
+  const deleteNotification = (id: string | number) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id))
+  }
+
   const addNotification = (item: Omit<NotificationItem, "id">) => {
     const newItem: NotificationItem = {
       ...item,
@@ -243,6 +248,7 @@ export function NotificationProvider({
         markAllAsRead,
         markAsRead,
         clearNotifications,
+        deleteNotification,
         addNotification,
         refreshNotifications,
       }}
