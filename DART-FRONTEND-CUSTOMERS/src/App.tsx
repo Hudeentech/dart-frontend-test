@@ -156,7 +156,7 @@ function AppContent() {
         : "max-w-md sm:max-w-lg"
 
     return (
-      <div className="w-full min-h-[100dvh] flex flex-col bg-[#fcfcfc] dark:bg-[#0c0c0e] text-gray-900 dark:text-white transition-colors">
+      <div className="w-full h-[100dvh] max-h-[100dvh] flex flex-col bg-[#fcfcfc] dark:bg-[#0c0c0e] text-gray-900 dark:text-white transition-colors overflow-hidden">
         <AuthLayout
           hideCarousel={true}
           maxWidthClass={maxWidth}

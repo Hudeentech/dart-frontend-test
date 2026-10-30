@@ -111,8 +111,8 @@ export default function ChooseAccountType({
         </div>
       )}
 
-      {/* Top Header Bar for Desktop & Mobile */}
-      <div className="px-4 sm:px-8 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-3.5 sm:pb-4 flex items-center justify-between border-b border-gray-100 dark:border-white/5 sticky top-0 bg-[#fcfcfc]/95 dark:bg-[#0c0c0e]/95 backdrop-blur-sm z-10 w-full">
+      {/* Top Header Bar for Desktop & Mobile - Fixed */}
+      <div className="fixed top-0 left-0 right-0 z-50 h-16 px-4 sm:px-8 flex items-center justify-between border-b border-gray-100 dark:border-white/5 bg-[#fcfcfc]/95 dark:bg-[#0c0c0e]/95 backdrop-blur-md w-full shrink-0">
         {onBack ? (
           <button
             type="button"
@@ -133,8 +133,8 @@ export default function ChooseAccountType({
         <div className="w-10" />
       </div>
 
-      {/* Main Content: 100% width on Desktop Middle Layout */}
-      <div className="flex-1 w-full px-4 sm:px-6 md:px-8 py-5 sm:py-6 flex flex-col justify-between max-w-4xl 2xl:max-w-5xl mx-auto">
+      {/* Main Content: 100% width on Desktop Middle Layout with pt-20 to clear fixed header */}
+      <div className="flex-1 w-full pt-20 px-4 sm:px-6 md:px-8 pb-6 flex flex-col justify-between max-w-4xl 2xl:max-w-5xl mx-auto">
         <div className="space-y-6 w-full">
           {/* Clean Headline Section */}
           <div className="w-full pt-1 pb-1">

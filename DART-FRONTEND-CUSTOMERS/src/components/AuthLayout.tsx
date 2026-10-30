@@ -80,10 +80,10 @@ export default function AuthLayout({
 
   if (hideCarousel) {
     return (
-      <div className="min-h-[100dvh] w-full flex flex-col bg-[#fcfcfc] dark:bg-[#0c0c0e] text-gray-900 dark:text-white transition-colors overflow-x-hidden">
-        {/* Top Header Bar with Logo and Theme Switcher (Desktop and Mobile) */}
+      <div className="h-[100dvh] max-h-[100dvh] w-full flex flex-col bg-[#fcfcfc] dark:bg-[#0c0c0e] text-gray-900 dark:text-white transition-colors overflow-hidden relative">
+        {/* Fixed Top Header Bar with Logo and Theme Switcher (Desktop and Mobile) */}
         {!hideTopBar && (
-          <header className="w-full flex items-center justify-between px-5 sm:px-8 pt-[max(0.875rem,env(safe-area-inset-top,0px))] pb-3 sm:pb-3.5 border-b border-gray-100 dark:border-white/5 bg-[#fcfcfc]/90 dark:bg-[#0c0c0e]/90 backdrop-blur-md sticky top-0 z-30 shrink-0">
+          <header className="fixed top-0 left-0 right-0 z-50 h-16 w-full flex items-center justify-between px-5 sm:px-8 border-b border-gray-100 dark:border-white/5 bg-[#fcfcfc]/95 dark:bg-[#0c0c0e]/95 backdrop-blur-md shrink-0">
             <div className="flex items-center gap-2.5">
               <DartLogo variant="auto" className="h-10 sm:h-11 w-auto" />
               <span className="hidden sm:inline-flex text-[10px] uppercase tracking-wider text-yellow-600 dark:text-yellow-400 font-bold bg-yellow-500/10 px-2.5 py-0.5 rounded-full border border-yellow-500/20">
@@ -106,9 +106,13 @@ export default function AuthLayout({
           </header>
         )}
 
-        {/* Centralized Onboarding Content Area on Desktop */}
-        <main className="flex-1 w-full flex items-center justify-center px-4 sm:px-6 md:px-8 py-6 sm:py-10 overflow-y-auto">
-          <div className={`w-full ${maxWidthClass} mx-auto flex flex-col animate-in fade-in duration-200`}>
+        {/* Centralized Onboarding Content Area on Desktop - Only this scrolls */}
+        <main
+          className={`flex-1 w-full overflow-y-auto overflow-x-hidden flex items-center justify-center px-4 sm:px-6 md:px-8 ${
+            !hideTopBar ? "pt-20 pb-8 sm:py-12" : "py-6 sm:py-10"
+          }`}
+        >
+          <div className={`w-full ${maxWidthClass} mx-auto flex flex-col my-auto animate-in fade-in duration-200`}>
             {children}
           </div>
         </main>
