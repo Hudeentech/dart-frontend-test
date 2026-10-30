@@ -1,5 +1,5 @@
 import React, { useState } from "react"
-import { ArrowLeft, ChevronRight, Check, Loader2 } from "lucide-react"
+import { ArrowLeft, ChevronRight, Check, Loader2, User, Bike, Building2 } from "lucide-react"
 
 export interface ChooseAccountTypeProps {
   onBack?: () => void
@@ -165,21 +165,8 @@ export default function ChooseAccountType({
               }`}
             >
               <div className="flex items-center gap-4 sm:gap-5 text-left">
-                <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-[#FFE48E] flex items-center justify-center shrink-0 shadow-xs">
-                  <svg
-                    width="26"
-                    height="26"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#121417"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M4 14v2a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-2" />
-                    <path d="M12 3v11" />
-                    <path d="m8 10 4 4 4-4" />
-                  </svg>
+                <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-[#FFE48E] flex items-center justify-center shrink-0 shadow-xs text-[#121417]">
+                  <User className="w-6 h-6 sm:w-7 sm:h-7 stroke-[2.2]" />
                 </div>
 
                 <div>
@@ -217,21 +204,8 @@ export default function ChooseAccountType({
               }`}
             >
               <div className="flex items-center gap-4 sm:gap-5 text-left">
-                <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-[#FFE48E] flex items-center justify-center shrink-0 shadow-xs">
-                  <svg
-                    width="26"
-                    height="26"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#121417"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-                    <path d="m3.3 7 8.7 5 8.7-5" />
-                    <path d="M12 12v9" />
-                  </svg>
+                <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-[#FFE48E] flex items-center justify-center shrink-0 shadow-xs text-[#121417]">
+                  <Bike className="w-6 h-6 sm:w-7 sm:h-7 stroke-[2.2]" />
                 </div>
 
                 <div>
@@ -265,21 +239,8 @@ export default function ChooseAccountType({
               className="w-full p-4 sm:p-5 rounded-2xl border border-gray-200/60 dark:border-white/5 bg-gray-50/70 dark:bg-white/[0.02] flex items-center justify-between cursor-pointer group opacity-90 transition-all hover:bg-gray-100/70 dark:hover:bg-white/[0.04]"
             >
               <div className="flex items-center gap-4 sm:gap-5 text-left">
-                <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-[#FFF9E6] dark:bg-[#252219] border border-[#FFE7A0]/60 dark:border-[#FFCC00]/20 flex items-center justify-center shrink-0">
-                  <svg
-                    width="26"
-                    height="26"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#9CA3AF"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-                    <path d="m3.3 7 8.7 5 8.7-5" />
-                    <path d="M12 12v9" />
-                  </svg>
+                <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-[#FFF9E6] dark:bg-[#252219] border border-[#FFE7A0]/60 dark:border-[#FFCC00]/20 flex items-center justify-center shrink-0 text-gray-500 dark:text-gray-400">
+                  <Building2 className="w-6 h-6 sm:w-7 sm:h-7 stroke-[2.2]" />
                 </div>
 
                 <div>

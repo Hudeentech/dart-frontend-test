@@ -140,9 +140,8 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
               <ArrowLeft className="size-5" />
             </button>
           )}
-          {embedded && <Bell className="size-5 text-yellow-500 shrink-0" />}
           <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-            {embedded ? "Notifications" : "Notifications"}
+            Notifications
           </h1>
           {unreadCount > 0 && (
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-yellow-400 text-black">

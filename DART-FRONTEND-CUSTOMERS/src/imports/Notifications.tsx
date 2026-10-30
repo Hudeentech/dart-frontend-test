@@ -99,9 +99,6 @@ export default function Notifications({
         >
           {embedded ? (
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center text-black shadow-2xs">
-                <Bell className="w-4 h-4" />
-              </div>
               <h2 className="font-semibold text-gray-900 dark:text-white text-base">
                 Notifications
               </h2>
