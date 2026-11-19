@@ -9,6 +9,7 @@ import MainLayout from "./components/MainLayout"
 import ProfileSetupPromptModal from "./components/ProfileSetupPromptModal"
 import ChooseAccountType from "./imports/ChooseAccountType"
 import { AuthProvider, useAuth } from "./context/AuthContext"
+import { getRiderAppUrl } from "./utils/account-switch"
 
 type Screen =
   | "phone-auth"
@@ -56,6 +57,8 @@ function AppContent() {
   const [history, setHistory] = useState<Screen[]>(loadOnboardingHistory)
   const { isAuthenticated, isLoading, user, setDirectAuth, setAuthMode } = useAuth()
   const [showProfilePrompt, setShowProfilePrompt] = useState(false)
+  const [isSwitchingToRider, setIsSwitchingToRider] = useState(false)
+  const [accountSwitchError, setAccountSwitchError] = useState<string | null>(null)
   const timerRef = useRef<any>(null)
   const hasTriggeredRef = useRef(false)
   const current = history[history.length - 1]
@@ -169,21 +172,7 @@ function AppContent() {
     push("nin")
   }
 
-  // 0. Bootstrap / Session verification check - prevents screen flickering or unauthorized view flash
-  if (isLoading) {
-    return (
-      <div className="w-full min-h-[100dvh] flex flex-col items-center justify-center bg-[#0c0c0e] text-white">
-        <div className="relative flex flex-col items-center">
-          <div className="w-12 h-12 rounded-2xl bg-[#FFCC00]/10 border border-[#FFCC00]/30 flex items-center justify-center shadow-lg shadow-[#FFCC00]/10 animate-pulse">
-            <div className="w-6 h-6 border-2 border-[#FFCC00] border-t-transparent rounded-full animate-spin" />
-          </div>
-          <p className="mt-4 text-xs font-medium text-white/50 tracking-wider uppercase">
-            Securing Dart Session...
-          </p>
-        </div>
-      </div>
-    )
-  }
+  // Session bootstrap and rider handoff do not block the normal app flow.
 
   // When user is navigating through onboarding flow
   if (isOnboardingStep) {
@@ -215,22 +204,43 @@ function AppContent() {
             />
           )}
           {current === "account-type" && (
-            <ChooseAccountType
-              onBack={pop}
-              onContinue={(type) => {
-                if (type === "rider") {
-                  const isLocal =
-                    window.location.hostname === "localhost" ||
-                    window.location.hostname === "127.0.0.1"
-                  const riderUrl = isLocal
-                    ? "http://localhost:8444/#/onboarding"
-                    : "/rider"
-                  window.location.href = riderUrl
-                } else {
-                  push("add-profile")
-                }
-              }}
-            />
+            <>
+              {accountSwitchError && (
+                <p
+                  role="alert"
+                  className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300"
+                >
+                  {accountSwitchError}
+                </p>
+              )}
+              <ChooseAccountType
+                onBack={pop}
+                onContinue={(type) => {
+                  if (type === "rider") {
+                    try {
+                      const destination = getRiderAppUrl()
+                      setAccountSwitchError(null)
+                      setIsSwitchingToRider(true)
+                      window.setTimeout(
+                        () => window.location.assign(destination),
+                        650,
+                      )
+                    } catch (error) {
+                      console.error(
+                        "[Onboarding] Could not switch to rider app:",
+                        error,
+                      )
+                      setAccountSwitchError(
+                        "Could not switch accounts. Please try again.",
+                      )
+                    }
+                  } else {
+                    setAccountSwitchError(null)
+                    push("add-profile")
+                  }
+                }}
+              />
+            </>
           )}
           {current === "add-profile" && (
             <AddProfilcPicAndName

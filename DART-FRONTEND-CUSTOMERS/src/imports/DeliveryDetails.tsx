@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect } from "react"
 import {
   ArrowLeft,
   Bell,
@@ -11,8 +11,6 @@ import {
   MessageSquareText,
   Phone,
   Camera,
-  Mic,
-  Trash2,
   Send,
   Maximize2,
   X,
@@ -24,14 +22,14 @@ import {
   Package,
   ShoppingBag,
 } from "lucide-react"
+import shoeImage from "../assets/nike_air_max_shoe.jpg"
 import ConfettiBackground from "../components/ConfettiBackground"
 import greenSuccessBadge from "../assets/good-mark.svg"
 import NotificationButton from "../components/NotificationButton"
 import linkedBoxSvg from "../assets/Linked-box.svg"
 import PackageStateIcon from "../components/PackageStateIcon"
 import { chatApi, getChatSocket } from "../api/chat.api"
-import type { ApiChatMessage, OrderStatus } from "../types/api.types"
-import { formatAudioDuration } from "../utils/audio"
+import type { ApiChatMessage } from "../types/api.types"
 import {
   cleanTrackingText,
   detectCourier,
@@ -46,8 +44,6 @@ export interface DeliveryDetailsItem {
   title?: string
   store?: string
   trackingCode?: string
-  orderStatus?: OrderStatus
-  estimatedMinutes?: number
   status?: "Delivered" | "In-Transit" | "Cancelled" | "Pending" | "Ready for pickup"
   image?: string
   fromLocation?: string
@@ -64,7 +60,6 @@ export interface DeliveryDetailsItem {
     rating: number
     reviewCount: number
     price: string
-    plateNumber?: string
     isSaved?: boolean
   }
   isInbound?: boolean
@@ -87,12 +82,8 @@ interface DeliveryDetailsProps {
 
 interface DeliveryChatMessage {
   id: string
-  clientMessageId?: string
   sender: "rider" | "user"
-  type: "text" | "audio"
-  text?: string
-  audioUrl?: string
-  audioDuration?: number
+  text: string
   time: string
   createdAt?: string
 }
@@ -100,12 +91,10 @@ interface DeliveryChatMessage {
 function mapDeliveryChatMessage(message: ApiChatMessage): DeliveryChatMessage {
   return {
     id: message.id,
-    clientMessageId: message.clientMessageId,
     sender:
       message.sender === "user" || message.senderRole === "customer"
         ? "user"
         : "rider",
-    type: message.type === "audio" ? "audio" : "text",
     text:
       message.text ||
       (message.type === "audio"
@@ -113,8 +102,6 @@ function mapDeliveryChatMessage(message: ApiChatMessage): DeliveryChatMessage {
         : message.type === "image"
           ? "Photo"
           : "Attachment"),
-    audioUrl: message.audioUrl,
-    audioDuration: message.audioDuration,
     time:
       message.time ||
       (message.createdAt
@@ -125,23 +112,6 @@ function mapDeliveryChatMessage(message: ApiChatMessage): DeliveryChatMessage {
         : "Just now"),
     createdAt: message.createdAt,
   }
-}
-
-function upsertDeliveryChatMessage(
-  messages: DeliveryChatMessage[],
-  message: DeliveryChatMessage,
-): DeliveryChatMessage[] {
-  const index = messages.findIndex(
-    (current) =>
-      current.id === message.id ||
-      (!!message.clientMessageId &&
-        current.clientMessageId === message.clientMessageId),
-  )
-  if (index < 0) return [...messages, message]
-
-  const updated = [...messages]
-  updated[index] = message
-  return updated
 }
 
 export default function DeliveryDetails({
@@ -175,12 +145,6 @@ export default function DeliveryDetails({
   const [chatMessages, setChatMessages] = useState<DeliveryChatMessage[]>([])
   const [chatError, setChatError] = useState<string | null>(null)
   const [isSendingMessage, setIsSendingMessage] = useState(false)
-  const [isRecordingVoice, setIsRecordingVoice] = useState(false)
-  const [recordingSeconds, setRecordingSeconds] = useState(0)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const mediaStreamRef = useRef<MediaStream | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
-  const recordingTimerRef = useRef<number | null>(null)
 
 
   // Synchronize live tracking data from API whenever an inbound package is viewed
@@ -234,7 +198,9 @@ export default function DeliveryDetails({
       if (!isActive || message.chatId !== chatId) return
       const formatted = mapDeliveryChatMessage(message)
       setChatMessages((current) =>
-        upsertDeliveryChatMessage(current, formatted),
+        current.some((item) => item.id === formatted.id)
+          ? current
+          : [...current, formatted],
       )
     }
 
@@ -243,15 +209,12 @@ export default function DeliveryDetails({
         const messages = await chatApi.getChatMessages(chatId)
         if (!isActive || !Array.isArray(messages)) return
         setChatMessages((current) => {
-          const merged = messages.reduce(
-            (result, message) =>
-              upsertDeliveryChatMessage(
-                result,
-                mapDeliveryChatMessage(message),
-              ),
-            current,
-          )
-          return merged.sort(
+          const merged = new Map(current.map((message) => [message.id, message]))
+          messages.forEach((message) => {
+            const formatted = mapDeliveryChatMessage(message)
+            merged.set(formatted.id, formatted)
+          })
+          return Array.from(merged.values()).sort(
             (a, b) =>
               new Date(a.createdAt || 0).getTime() -
               new Date(b.createdAt || 0).getTime(),
@@ -279,16 +242,6 @@ export default function DeliveryDetails({
       window.clearInterval(pollTimer)
     }
   }, [showRiderChat, delivery?.id])
-
-  useEffect(
-    () => () => {
-      if (recordingTimerRef.current !== null) {
-        window.clearInterval(recordingTimerRef.current)
-      }
-      mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
-    },
-    [],
-  )
 
   // If this is an inbound package:
   if (delivery?.isInbound) {
@@ -757,7 +710,7 @@ export default function DeliveryDetails({
     title: delivery?.title || "Nike Air Max shoe",
     trackingCode: delivery?.trackingCode || "#42324-HUD-PKG34R",
     status: delivery?.status || "Delivered",
-    image: delivery?.image || linkedBoxSvg,
+    image: delivery?.image || shoeImage,
     fromLocation: delivery?.fromLocation || "GIG TERMINAL",
     toLocation: delivery?.toLocation || "Auchi, Edo State",
     date: delivery?.date || "Yesterday",
@@ -799,7 +752,6 @@ export default function DeliveryDetails({
     const optimisticMessage: DeliveryChatMessage = {
       id: tempId,
       sender: "user",
-      type: "text",
       text,
       time: new Date().toLocaleTimeString([], {
         hour: "2-digit",
@@ -830,146 +782,6 @@ export default function DeliveryDetails({
     } finally {
       setIsSendingMessage(false)
     }
-  }
-
-  const startVoiceRecording = async () => {
-    if (!delivery?.id) {
-      setChatError("This delivery is not linked to an order chat.")
-      return
-    }
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-      setChatError("Voice recording is not supported by this browser.")
-      return
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      mediaStreamRef.current = stream
-      audioChunksRef.current = []
-      const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(
-        (type) => MediaRecorder.isTypeSupported(type),
-      )
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream)
-      mediaRecorderRef.current = recorder
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) audioChunksRef.current.push(event.data)
-      }
-      recorder.start()
-      setChatError(null)
-      setRecordingSeconds(0)
-      setIsRecordingVoice(true)
-      recordingTimerRef.current = window.setInterval(
-        () => setRecordingSeconds((seconds) => seconds + 1),
-        1000,
-      )
-    } catch (error) {
-      console.error("Could not start voice recording:", error)
-      setChatError("Microphone access is unavailable. Check your browser permission.")
-    }
-  }
-
-  const cancelVoiceRecording = () => {
-    if (recordingTimerRef.current !== null) {
-      window.clearInterval(recordingTimerRef.current)
-      recordingTimerRef.current = null
-    }
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.onstop = null
-      if (mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop()
-      }
-      mediaRecorderRef.current = null
-    }
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
-    mediaStreamRef.current = null
-    audioChunksRef.current = []
-    setRecordingSeconds(0)
-    setIsRecordingVoice(false)
-  }
-
-  const sendVoiceRecording = () => {
-    const recorder = mediaRecorderRef.current
-    if (!recorder || recorder.state === "inactive" || !delivery?.id) return
-
-    const chatId = `order-${delivery.id}`
-    const duration = Math.max(1, recordingSeconds)
-    recorder.onstop = () => {
-      mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
-      mediaStreamRef.current = null
-      mediaRecorderRef.current = null
-      if (recordingTimerRef.current !== null) {
-        window.clearInterval(recordingTimerRef.current)
-        recordingTimerRef.current = null
-      }
-      setIsRecordingVoice(false)
-      setRecordingSeconds(0)
-
-      const blob = new Blob(audioChunksRef.current, {
-        type: recorder.mimeType || "audio/webm",
-      })
-      audioChunksRef.current = []
-      const reader = new FileReader()
-      reader.onload = async () => {
-        if (typeof reader.result !== "string") {
-          setChatError("Voice message could not be prepared. Please try again.")
-          return
-        }
-
-        const clientMessageId =
-          globalThis.crypto?.randomUUID?.() ||
-          `voice-${Date.now()}-${Math.random().toString(36).slice(2)}`
-        const createdAt = new Date().toISOString()
-        const optimistic: DeliveryChatMessage = {
-          id: clientMessageId,
-          clientMessageId,
-          sender: "user",
-          type: "audio",
-          text: "Voice message",
-          audioUrl: reader.result,
-          audioDuration: duration,
-          time: new Date(createdAt).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          createdAt,
-        }
-        setChatError(null)
-        setChatMessages((current) => [...current, optimistic])
-        setIsSendingMessage(true)
-
-        try {
-          const saved = await chatApi.sendMessage(chatId, {
-            type: "audio",
-            audioUrl: reader.result,
-            audioDuration: duration,
-            clientMessageId,
-          })
-          const formatted = mapDeliveryChatMessage(saved)
-          setChatMessages((current) =>
-            upsertDeliveryChatMessage(current, formatted),
-          )
-        } catch (error) {
-          setChatMessages((current) =>
-            current.filter((message) => message.id !== clientMessageId),
-          )
-          setChatError(
-            error instanceof Error
-              ? error.message
-              : "Voice message could not be sent.",
-          )
-        } finally {
-          setIsSendingMessage(false)
-        }
-      }
-      reader.onerror = () => {
-        console.error("Could not read recorded voice message:", reader.error)
-        setChatError("Voice message could not be prepared. Please try again.")
-      }
-      reader.readAsDataURL(blob)
-    }
-    recorder.stop()
   }
 
   // Close expanded image on Escape key
@@ -1021,7 +833,7 @@ export default function DeliveryDetails({
                 </span>
                 <span>•</span>
                 <span>
-                  {item.status || "Status unavailable"}
+                  {item.status === "Delivered" ? "Delivered" : "In-Transit"}
                 </span>
               </p>
             </div>
@@ -1110,26 +922,9 @@ export default function DeliveryDetails({
                       : "bg-white dark:bg-[#1c1c20] text-gray-900 dark:text-white rounded-bl-xs border border-gray-100 dark:border-white/5"
                   }`}
                 >
-                  {msg.type === "audio" && msg.audioUrl ? (
-                    <div className="min-w-[210px] max-w-full">
-                      <audio
-                        controls
-                        preload="metadata"
-                        src={msg.audioUrl}
-                        className="h-9 w-full"
-                        aria-label="Voice message playback"
-                      />
-                      {msg.audioDuration ? (
-                        <p className="mt-1 text-[10px] opacity-70">
-                          Voice message · {formatAudioDuration(msg.audioDuration)}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <p className="text-xs sm:text-sm leading-relaxed">
-                      {msg.text}
-                    </p>
-                  )}
+                  <p className="text-xs sm:text-sm leading-relaxed">
+                    {msg.text}
+                  </p>
                   <p
                     className={`text-[9.5px] mt-1 text-right ${
                       isUser
@@ -1166,102 +961,43 @@ export default function DeliveryDetails({
             ))}
           </div>
 
-          {isRecordingVoice ? (
-            <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm dark:border-white/10 dark:bg-[#202024]">
-              <button
-                type="button"
-                onClick={cancelVoiceRecording}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/10"
-                aria-label="Cancel voice recording"
-                title="Cancel recording"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-              <div className="min-w-0 flex-1">
-                <div className="mb-1.5 flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-gray-200">
-                    <span className="h-2 w-2 rounded-full bg-red-500" />
-                    Recording voice message
-                  </span>
-                  <span className="font-mono text-xs text-gray-600 dark:text-gray-300">
-                    {formatAudioDuration(recordingSeconds)}
-                  </span>
-                </div>
-                <div
-                  role="progressbar"
-                  aria-label="Recording in progress"
-                  className="h-1 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10"
-                >
-                  <div
-                    className="h-full rounded-full bg-red-500 transition-[width] duration-1000"
-                    style={{
-                      width: `${Math.min(100, (recordingSeconds / 60) * 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={sendVoiceRecording}
-                disabled={isSendingMessage}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FFCC00] text-gray-950 transition-colors hover:bg-[#f5c400] disabled:opacity-50"
-                aria-label="Finish and send voice message"
-                title="Send voice note"
-              >
-                <Send className="h-4 w-4 stroke-[2.5]" />
-              </button>
-            </div>
-          ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                void handleSendMessage()
-              }}
-              className="flex items-center gap-2"
+          {/* Input Bar */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              handleSendMessage()
+            }}
+            className="flex items-center gap-2"
+          >
+            <button
+              type="button"
+              onClick={() => handleCopy("Photo feature", "photo")}
+              className="w-10 h-10 flex items-center justify-center bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-full shrink-0 text-gray-500 dark:text-gray-400 transition-colors cursor-pointer"
+              title="Attach photo"
             >
-              <button
-                type="button"
-                onClick={() => handleCopy("Photo feature", "photo")}
-                className="w-10 h-10 flex items-center justify-center bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-full shrink-0 text-gray-500 dark:text-gray-400 transition-colors cursor-pointer"
-                title="Attach photo"
-              >
-                <Camera className="w-5 h-5" />
-              </button>
+              <Camera className="w-5 h-5" />
+            </button>
 
-              <div className="flex-1 bg-gray-100 dark:bg-[#202024] rounded-2xl flex items-center px-4 py-2.5 border border-transparent focus-within:border-yellow-400 transition-colors">
-                <input
-                  type="text"
-                  value={chatInputText}
-                  onChange={(e) => setChatInputText(e.target.value)}
-                  placeholder={`Message ${item.rider?.name || "rider"}...`}
-                  disabled={!delivery?.id || isSendingMessage}
-                  className="bg-transparent w-full focus:outline-none text-xs sm:text-sm text-gray-900 dark:text-white placeholder-gray-400"
-                />
-              </div>
+            <div className="flex-1 bg-gray-100 dark:bg-[#202024] rounded-2xl flex items-center px-4 py-2.5 border border-transparent focus-within:border-yellow-400 transition-colors">
+              <input
+                type="text"
+                value={chatInputText}
+                onChange={(e) => setChatInputText(e.target.value)}
+                placeholder={`Message ${item.rider?.name || "rider"}...`}
+                disabled={!delivery?.id || isSendingMessage}
+                className="bg-transparent w-full focus:outline-none text-xs sm:text-sm text-gray-900 dark:text-white placeholder-gray-400"
+              />
+            </div>
 
-              {chatInputText.trim() ? (
-                <button
-                  type="submit"
-                  disabled={!delivery?.id || isSendingMessage}
-                  className="w-10 h-10 flex items-center justify-center bg-[#FFCC00] hover:bg-[#f5c400] disabled:opacity-40 disabled:hover:bg-[#FFCC00] text-gray-950 rounded-full shrink-0 transition-all cursor-pointer shadow-xs active:scale-95"
-                  title="Send message"
-                >
-                  <Send className="w-4 h-4 stroke-[2.5]" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void startVoiceRecording()}
-                  disabled={!delivery?.id || isSendingMessage}
-                  className="w-10 h-10 flex items-center justify-center bg-[#FFCC00] hover:bg-[#f5c400] disabled:opacity-40 text-gray-950 rounded-full shrink-0 transition-all cursor-pointer shadow-xs active:scale-95"
-                  title="Record voice message"
-                  aria-label="Record voice message"
-                >
-                  <Mic className="w-5 h-5" />
-                </button>
-              )}
-            </form>
-          )}
+            <button
+              type="submit"
+              disabled={!chatInputText.trim() || !delivery?.id || isSendingMessage}
+              className="w-10 h-10 flex items-center justify-center bg-[#FFCC00] hover:bg-[#f5c400] disabled:opacity-40 disabled:hover:bg-[#FFCC00] text-gray-950 rounded-full shrink-0 transition-all cursor-pointer shadow-xs active:scale-95"
+              title="Send message"
+            >
+              <Send className="w-4 h-4 stroke-[2.5]" />
+            </button>
+          </form>
         </div>
       </div>
     )

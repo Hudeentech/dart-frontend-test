@@ -40,6 +40,7 @@ import {
   AlertOctagon,
   Loader2,
 } from "lucide-react"
+import defaultPixelPhoto from "../assets/google_pixel_photo.jpg"
 import iphone12Photo from "../assets/iphone_12_pro.jpg"
 import divineAvatar from "../assets/divine_augustina_rider.jpg"
 import allRidersImage from "../assets/all-riders-image.png"
@@ -57,7 +58,7 @@ import { userApi } from "../api/user.api"
 import { walletApi } from "../api/wallet.api"
 import { chatApi, getChatSocket } from "../api/chat.api"
 import { useAuth } from "../context/AuthContext"
-import { Address, ApiChatMessage, OrderStatus } from "../types/api.types"
+import { Address, ApiChatMessage } from "../types/api.types"
 import { PackageDraft, savePackageDraft, deletePackageDraft } from "../utils/drafts"
 
 export interface Rider {
@@ -71,49 +72,6 @@ export interface Rider {
   isVerified: boolean
   isAvailable: boolean
   plateNumber?: string
-}
-
-interface LivePackageStatus {
-  status?: OrderStatus
-  state?: string
-  isRiderAccepted?: boolean
-  isPackageArrived?: boolean
-  isArrivalImminent?: boolean
-  isCancelled?: boolean
-  pendingCountdown?: number
-  etaSeconds?: number | null
-  etaTarget?: "PICKUP" | "DESTINATION" | null
-  packageName?: string
-  trackingId?: string
-  fromLocation?: string
-  toLocation?: string
-  estimatedFee?: string
-  dropOffCode?: string
-  milestones?: {
-    riderEnRouteAt?: string | null
-    packageCollectedAt?: string | null
-    packageArrivedAt?: string | null
-    deliveredAt?: string | null
-  }
-  rider?: {
-    id?: string
-    name?: string
-    avatar?: string
-    rating?: number
-    reviews?: number
-    phoneNumber?: string
-    etaMinutes?: number
-    distanceKm?: number
-    plateNumber?: string
-  }
-}
-
-const formatMilestoneTime = (timestamp?: string | null) => {
-  if (!timestamp) return ""
-  const date = new Date(timestamp)
-  return Number.isNaN(date.getTime())
-    ? ""
-    : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
 }
 
 export const defaultRidersList: Rider[] = [
@@ -144,31 +102,6 @@ export const defaultRidersList: Rider[] = [
   },
 ]
 
-const preparePackagePhoto = async (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onerror = () => reject(new Error("Could not read the package photo."))
-    reader.onload = () => {
-      const image = new Image()
-      image.onerror = () => reject(new Error("Could not process the package photo."))
-      image.onload = () => {
-        const scale = Math.min(1, 1280 / Math.max(image.width, image.height))
-        const canvas = document.createElement("canvas")
-        canvas.width = Math.round(image.width * scale)
-        canvas.height = Math.round(image.height * scale)
-        const context = canvas.getContext("2d")
-        if (!context) {
-          reject(new Error("Could not process the package photo."))
-          return
-        }
-        context.drawImage(image, 0, 0, canvas.width, canvas.height)
-        resolve(canvas.toDataURL("image/jpeg", 0.82))
-      }
-      image.src = String(reader.result)
-    }
-    reader.readAsDataURL(file)
-  })
-
 export type FlowScreen = "details" | "destination" | "add_location" | "choose_rider" | "all_riders" | "confirm_delivery" | "payment_method" | "package_status" | "success"
 
 interface SendPackageFlowProps {
@@ -188,19 +121,6 @@ interface SendPackageFlowProps {
     category?: string
     weight?: string
     riderName?: string
-    orderId?: string
-    image?: string
-    status?: OrderStatus
-    rider?: {
-      name: string
-      idCode: string
-      avatar: string
-      rating: number
-      reviewCount: number
-      price: string
-      plateNumber?: string
-      isSaved?: boolean
-    }
   } | null
   onBack: () => void
   onComplete?: (details: {
@@ -239,13 +159,8 @@ export default function SendPackageFlow({
     file?: File
     previewUrl: string
   } | null>(
-    initialImage ||
-      (initialPackageDetails?.image
-        ? { previewUrl: initialPackageDetails.image }
-        : null),
+    initialImage || null,
   )
-  const packagePhoto =
-    capturedImage?.previewUrl || initialPackageDetails?.image
 
   // Camera modal state (only camera and prompt modals appear as popups)
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false)
@@ -278,21 +193,14 @@ export default function SendPackageFlow({
       initialPackageDetails?.fromLocation ||
       "",
   )
-  const [pickupCoordinates, setPickupCoordinates] = useState<{
-    lat: number
-    lng: number
-  } | null>(null)
-  const [isLocatingPickup, setIsLocatingPickup] = useState(false)
-  const [pickupLocationError, setPickupLocationError] = useState<string | null>(null)
   const [toLocation, setToLocation] = useState(
     initialDraft?.toLocation ||
       initialPackageDetails?.toLocation ||
       "",
   )
-  const [estimatedFee, setEstimatedFee] = useState("")
-  const [quoteError, setQuoteError] = useState<string | null>(null)
-  const [isCalculatingQuote, setIsCalculatingQuote] = useState(false)
-  const quoteRequestId = useRef(0)
+  const [estimatedFee, setEstimatedFee] = useState(
+    initialDraft?.estimatedFee || "1,500",
+  )
 
   // Add new location state
   const [newLocationSearch, setNewLocationSearch] = useState("")
@@ -454,12 +362,6 @@ export default function SendPackageFlow({
       loadWallet()
     } else if (screen === "destination" || screen === "add_location") {
       loadAddresses()
-    } else if (screen === "package_status") {
-      window.scrollTo(0, 0)
-      const mainEl = document.querySelector("main")
-      if (mainEl) {
-        mainEl.scrollTo({ top: 0, behavior: "instant" })
-      }
     }
   }, [screen])
 
@@ -476,21 +378,10 @@ export default function SendPackageFlow({
   const [showExpandedImage, setShowExpandedImage] = useState(false)
 
   // Order & Tracking State
-  const [activeOrderId, setActiveOrderId] = useState<string | null>(
-    initialPackageDetails?.orderId || null,
-  )
-  const [liveOrderStatus, setLiveOrderStatus] =
-    useState<LivePackageStatus | null>(null)
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null)
   const [activeOrderTrackingId, setActiveOrderTrackingId] = useState<string | null>(
     initialPackageDetails?.trackingId || null,
   )
-  const lastEtaDistanceRef = useRef<{
-    target: LivePackageStatus["etaTarget"]
-    distanceKm?: number
-  } | null>(null)
-  const liveEtaDeadlineRef = useRef<number | null>(null)
-  const [liveEtaDeadline, setLiveEtaDeadline] = useState<number | null>(null)
-  const [etaClock, setEtaClock] = useState(() => Date.now())
   const [riderSelectionKey, setRiderSelectionKey] = useState<string | null>(null)
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false)
 
@@ -674,18 +565,6 @@ export default function SendPackageFlow({
 
   const getLocationCoords = (name: string): { lat: number; lng: number } => {
     const lower = (name || "").toLowerCase()
-    const normalizedLocation = lower.replace(/\s+/g, " ").trim()
-    const savedAddress = savedAddresses.find((address) => {
-      const addressLabel =
-        `${address.street}${address.city ? `, ${address.city}` : ""}`
-          .toLowerCase()
-          .replace(/\s+/g, " ")
-          .trim()
-      return addressLabel === normalizedLocation || address.street.toLowerCase() === normalizedLocation
-    })
-    if (savedAddress) {
-      return { lat: savedAddress.latitude, lng: savedAddress.longitude }
-    }
     if (lower.includes("igbe")) return { lat: 7.0712, lng: 6.2755 }
     if (lower.includes("delta") || lower.includes("terminal"))
       return { lat: 7.062, lng: 6.268 }
@@ -711,53 +590,11 @@ export default function SendPackageFlow({
     }
   }
 
-  const handleUseCurrentPickupLocation = () => {
-    if (!navigator.geolocation) {
-      setPickupLocationError("Location access is not available in this browser.")
-      return
-    }
-
-    setIsLocatingPickup(true)
-    setPickupLocationError(null)
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        setPickupCoordinates({ lat: coords.latitude, lng: coords.longitude })
-        setFromLocation("My current location")
-        setIsLocatingPickup(false)
-      },
-      (error) => {
-        setPickupLocationError(
-          error.code === error.PERMISSION_DENIED
-            ? "Allow location access in your browser, or enter your pickup address below."
-            : "Could not get your location. Enter your pickup address instead.",
-        )
-        setIsLocatingPickup(false)
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-    )
-  }
-
   const recalculateQuote = async (origin?: string, destination?: string) => {
-    const requestId = ++quoteRequestId.current
-    const selectedOrigin = origin ?? fromLocation
-    const selectedDestination = destination ?? toLocation
-    if (!selectedOrigin.trim() || !selectedDestination.trim()) {
-      setEstimatedFee("")
-      setQuoteError(null)
-      setIsCalculatingQuote(false)
-      return
-    }
-
-    setEstimatedFee("")
-    setQuoteError(null)
-    setIsCalculatingQuote(true)
     try {
-      const o = selectedOrigin || "Auchi, Edo State"
-      const d = selectedDestination
-      const originCoords =
-        selectedOrigin === fromLocation && pickupCoordinates
-          ? pickupCoordinates
-          : getLocationCoords(o)
+      const o = origin || fromLocation || "Auchi, Edo State"
+      const d = destination || toLocation || "Benin"
+      const originCoords = getLocationCoords(o)
       const destCoords = getLocationCoords(d)
       const weightVal =
         selectedWeight === "heavy"
@@ -765,42 +602,19 @@ export default function SendPackageFlow({
           : selectedWeight === "medium"
             ? 2.5
             : 1.0
-      const category =
-        selectedCategory === "Electronics"
-          ? "ELECTRONICS"
-          : selectedCategory === "Clothes"
-            ? "CLOTHING"
-            : selectedCategory === "Documents"
-              ? "DOCUMENT"
-              : "PARCEL"
       const quote = await ordersApi.calculateQuote({
         pickupLat: originCoords.lat,
         pickupLng: originCoords.lng,
         destLat: destCoords.lat,
         destLng: destCoords.lng,
         weightKg: weightVal,
-        category,
         isFragile,
       })
-      if (!Number.isFinite(quote?.totalPrice)) {
-        throw new Error("The pricing service returned an invalid quote.")
+      if (quote?.breakdown?.totalPrice) {
+        setEstimatedFee(Number(quote.breakdown.totalPrice).toLocaleString())
       }
-      if (requestId === quoteRequestId.current) {
-        setEstimatedFee(quote.totalPrice.toLocaleString())
-        setQuoteError(null)
-      }
-    } catch (error) {
-      if (requestId === quoteRequestId.current) {
-        setQuoteError(
-          error instanceof Error
-            ? error.message
-            : "Could not calculate the delivery fee. Please try again.",
-        )
-      }
-    } finally {
-      if (requestId === quoteRequestId.current) {
-        setIsCalculatingQuote(false)
-      }
+    } catch (e) {
+      // Keeps current estimate if backend offline
     }
   }
 
@@ -812,16 +626,9 @@ export default function SendPackageFlow({
     }
 
     setToLocation(loc)
+    recalculateQuote(fromLocation, loc)
 
-    const alreadySaved = savedAddresses.some((address) => {
-      const savedLocation =
-        `${address.street}${address.city ? `, ${address.city}` : ""}`
-          .toLowerCase()
-          .trim()
-      return savedLocation === loc.toLowerCase()
-    })
-
-    if (saveToBook && savedAddresses.length < 5 && !alreadySaved) {
+    if (saveToBook) {
       setIsSavingAddress(true)
       try {
         const parts = loc.split(",").map((s) => s.trim())
@@ -842,10 +649,10 @@ export default function SendPackageFlow({
           setSavedAddresses((prev) => [
             newAddr,
             ...prev.filter((a) => a.id !== newAddr.id),
-          ].slice(0, 5))
+          ])
         }
       } catch (err) {
-        console.error("[SendPackageFlow] Failed to save address:", err)
+        console.warn("[SendPackageFlow] Save address note:", err)
       } finally {
         setIsSavingAddress(false)
       }
@@ -856,14 +663,14 @@ export default function SendPackageFlow({
 
   useEffect(() => {
     recalculateQuote(fromLocation, toLocation)
-  }, [selectedWeight, selectedCategory, isFragile, fromLocation, toLocation, savedAddresses, pickupCoordinates])
+  }, [selectedWeight, isFragile, fromLocation, toLocation])
 
   const [isLoadingRiders, setIsLoadingRiders] = useState(false)
 
   const loadOnlineRiders = async () => {
     setIsLoadingRiders(true)
     try {
-      const coords = pickupCoordinates || getLocationCoords(fromLocation || "Auchi, Edo State")
+      const coords = getLocationCoords(fromLocation || "Auchi, Edo State")
       const available = await ridersApi.findAvailable({
         latitude: coords.lat,
         longitude: coords.lng,
@@ -951,46 +758,22 @@ export default function SendPackageFlow({
   // Package Status screen state
   const [countdown, setCountdown] = useState(40) // 40 seconds countdown
   const [showCancelModal, setShowCancelModal] = useState(false)
-  const [cancelError, setCancelError] = useState<string | null>(null)
-  const [isCancelling, setIsCancelling] = useState(false)
   const [showReassignRiderModal, setShowReassignRiderModal] = useState(false)
   const [isReassigningRider, setIsReassigningRider] = useState(false)
   const [isRiderAccepted, setIsRiderAccepted] = useState(
-    initialPackageDetails?.status
-      ? [
-          "RIDER_ACCEPTED",
-          "PICKUP_PENDING",
-          "PICKED_UP",
-          "IN_TRANSIT",
-          "DELIVERED",
-          "CUSTOMER_CONFIRMED",
-          "SETTLED",
-        ].includes(initialPackageDetails.status)
-      : initialScreen === "package_status"
-        ? (initialIsRiderAccepted ?? true)
-        : false,
+    initialScreen === "package_status"
+      ? (initialIsRiderAccepted ?? true)
+      : false,
   )
-  const [isPackageArrived, setIsPackageArrived] = useState(
-    Boolean(
-      initialPackageDetails?.status &&
-        ["DELIVERED", "CUSTOMER_CONFIRMED", "SETTLED"].includes(
-          initialPackageDetails.status,
-        ),
-    ),
-  )
-  const [isTransactionComplete, setIsTransactionComplete] = useState(
-    initialPackageDetails?.status === "SETTLED",
-  )
+  const [isPackageArrived, setIsPackageArrived] = useState(false)
   const [transitCountdown, setTransitCountdown] = useState(1563) // 26:03
   const [showReportModal, setShowReportModal] = useState(false)
   const [showDropOffCodeModal, setShowDropOffCodeModal] = useState(false)
-  const [dropOffCode, setDropOffCode] = useState("30184")
+  const [dropOffCode, setDropOffCode] = useState("3018")
   const [isCodeCopied, setIsCodeCopied] = useState(false)
   const [showRatingModal, setShowRatingModal] = useState(false)
   const [userRating, setUserRating] = useState(5)
-  const [isCancelled, setIsCancelled] = useState(
-    initialPackageDetails?.status === "CANCELLED",
-  )
+  const [isCancelled, setIsCancelled] = useState(false)
   const [showCancelledToast, setShowCancelledToast] = useState(false)
   const [showAcceptedToast, setShowAcceptedToast] = useState(false)
 
@@ -998,6 +781,7 @@ export default function SendPackageFlow({
   useEffect(() => {
     if (
       screen !== "package_status" ||
+      showCancelModal ||
       isRiderAccepted ||
       isCancelled
     )
@@ -1013,12 +797,7 @@ export default function SendPackageFlow({
       })
     }, 1000)
     return () => clearInterval(timer)
-  }, [
-    screen,
-    countdown,
-    isRiderAccepted,
-    isCancelled,
-  ])
+  }, [screen, countdown, showCancelModal, isRiderAccepted, isCancelled])
 
   // Real-time backend status polling while on package_status screen
   useEffect(() => {
@@ -1027,87 +806,29 @@ export default function SendPackageFlow({
     let isMounted = true
     const pollStatus = async () => {
       try {
-        const live: LivePackageStatus = await ordersApi.getLiveStatus(activeOrderId)
+        const live: any = await ordersApi.getLiveStatus(activeOrderId)
         if (!isMounted || !live) return
 
-        setLiveOrderStatus(live)
-        setIsRiderAccepted(Boolean(live.isRiderAccepted))
-        if (
-          !live.isRiderAccepted &&
-          typeof live.pendingCountdown === "number"
-        ) {
-          setCountdown(live.pendingCountdown)
-        }
-        if (live.isRiderAccepted && typeof live.etaSeconds === "number") {
-          const distanceKm = live.rider?.distanceKm
-          const previous = lastEtaDistanceRef.current
-          const now = Date.now()
-          const remainingFromDeadline =
-            liveEtaDeadlineRef.current === null
-              ? null
-              : Math.max(0, Math.ceil((liveEtaDeadlineRef.current - now) / 1000))
-          const targetChanged = previous?.target !== live.etaTarget
-          const locationChanged =
-            typeof distanceKm === "number" &&
-            (previous?.distanceKm == null ||
-              Math.abs(previous.distanceKm - distanceKm) >= 0.05)
-          const estimateChanged =
-            remainingFromDeadline === null ||
-            Math.abs(remainingFromDeadline - live.etaSeconds) >= 20
-
-          if (targetChanged || locationChanged || estimateChanged) {
-            const deadline = now + Math.max(0, live.etaSeconds) * 1000
-            liveEtaDeadlineRef.current = deadline
-            setLiveEtaDeadline(deadline)
-          }
-
-          if (targetChanged && typeof distanceKm !== "number") {
-            lastEtaDistanceRef.current = {
-              target: live.etaTarget,
-            }
-          } else if (targetChanged || locationChanged || !previous) {
-            lastEtaDistanceRef.current = {
-              target: live.etaTarget,
-              ...(typeof distanceKm === "number" ? { distanceKm } : {}),
-            }
-          }
-        } else if (!live.isRiderAccepted || lastEtaDistanceRef.current?.target !== live.etaTarget) {
-          liveEtaDeadlineRef.current = null
-          setLiveEtaDeadline(null)
-          lastEtaDistanceRef.current = null
-        }
-        setIsPackageArrived(Boolean(live.isPackageArrived))
-        setIsCancelled(Boolean(live.isCancelled))
-        const transactionComplete = ["CUSTOMER_CONFIRMED", "SETTLED"].includes(
-          live.status || "",
-        )
-        setIsTransactionComplete(transactionComplete)
-        if (transactionComplete) {
-          setShowDropOffCodeModal(false)
-          setShowReportModal(false)
-          setScreen("success")
-        }
-        if (live.packageName) setPackageName(live.packageName)
-        if (live.fromLocation) setFromLocation(live.fromLocation)
-        if (live.toLocation) setToLocation(live.toLocation)
-        if (live.estimatedFee) setEstimatedFee(live.estimatedFee)
         if (live.isRiderAccepted && !isRiderAccepted) {
+          setIsRiderAccepted(true)
           setShowAcceptedToast(true)
           setTimeout(() => setShowAcceptedToast(false), 3500)
         }
 
+        if (live.isPackageArrived && !isPackageArrived) {
+          setIsPackageArrived(true)
+        }
+
         if (live.isCancelled && !isCancelled) {
+          setIsCancelled(true)
           setShowCancelledToast(true)
         }
 
         if (live.dropOffCode) {
           setDropOffCode(live.dropOffCode)
         }
-        if (live.trackingId) {
-          setActiveOrderTrackingId(live.trackingId)
-        }
       } catch (err) {
-        console.warn("[SendPackageFlow] Live order status refresh failed:", err)
+        // Silently tolerate background note
       }
     }
 
@@ -1117,30 +838,11 @@ export default function SendPackageFlow({
       isMounted = false
       clearInterval(interval)
     }
-  }, [screen, activeOrderId, isRiderAccepted, isCancelled])
-
-  useEffect(() => {
-    if (
-      screen !== "package_status" ||
-      !isRiderAccepted ||
-      isPackageArrived ||
-      isCancelled
-    )
-      return
-
-    const timer = setInterval(() => setEtaClock(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [screen, isRiderAccepted, isPackageArrived, isCancelled])
+  }, [screen, activeOrderId, isRiderAccepted, isPackageArrived, isCancelled])
 
   // Timer effect for transit countdown (26:03 -> 00:00)
   useEffect(() => {
-    if (
-      screen !== "package_status" ||
-      !isRiderAccepted ||
-      isPackageArrived ||
-      activeOrderId ||
-      initialPackageDetails?.orderId
-    )
+    if (screen !== "package_status" || !isRiderAccepted || isPackageArrived)
       return
     if (transitCountdown <= 0) {
       setIsPackageArrived(true)
@@ -1157,14 +859,7 @@ export default function SendPackageFlow({
       })
     }, 1000)
     return () => clearInterval(timer)
-  }, [
-    screen,
-    isRiderAccepted,
-    isPackageArrived,
-    transitCountdown,
-    activeOrderId,
-    initialPackageDetails?.orderId,
-  ])
+  }, [screen, isRiderAccepted, isPackageArrived, transitCountdown])
 
   // Close expanded image with Escape key
   useEffect(() => {
@@ -1194,22 +889,14 @@ export default function SendPackageFlow({
   // Final booking confirmation with chosen rider -> shows package_status screen next!
   const handleConfirmPayment = async () => {
     if (isConfirmingPayment) return
-    if (isCalculatingQuote || !estimatedFee || quoteError) {
-      setCheckoutError("Please wait for a valid delivery quote before continuing.")
-      return
-    }
     setIsConfirmingPayment(true)
     setCheckoutError(null)
 
     try {
       let orderId = activeOrderId
       if (!orderId) {
-        const photoUrl = capturedImage?.file
-          ? await preparePackagePhoto(capturedImage.file)
-          : undefined
         const createdPkg: any = await packagesApi.createPackage({
           name: packageName || "Customer Package",
-          photoUrl,
           category:
             selectedCategory === "Electronics"
               ? "ELECTRONICS"
@@ -1230,8 +917,8 @@ export default function SendPackageFlow({
             street: fromLocation || "Auchi, Edo State",
             city: "Auchi",
             state: "Edo State",
-            latitude: (pickupCoordinates || getLocationCoords(fromLocation)).lat,
-            longitude: (pickupCoordinates || getLocationCoords(fromLocation)).lng,
+            latitude: getLocationCoords(fromLocation).lat,
+            longitude: getLocationCoords(fromLocation).lng,
           },
           destinationAddress: {
             title: "Destination",
@@ -1249,14 +936,6 @@ export default function SendPackageFlow({
         const trackingId = createdPkg?.order?.trackingId || createdPkg?.trackingId
         if (trackingId) setActiveOrderTrackingId(trackingId)
       }
-
-      const authoritativeOrder = await ordersApi.getOrder(orderId)
-      const authoritativeTotal = Number(authoritativeOrder.totalPrice)
-      if (!Number.isFinite(authoritativeTotal) || authoritativeTotal < 0) {
-        throw new Error("The server returned an invalid order total.")
-      }
-      const authoritativeFee = authoritativeTotal.toLocaleString()
-      setEstimatedFee(authoritativeFee)
 
       const selectionKey = `${orderId}:${selectedRiderId}`
       if (riderSelectionKey !== selectionKey) {
@@ -1285,7 +964,8 @@ export default function SendPackageFlow({
       }
 
       if (selectedPaymentMethod === "wallet") {
-        setWalletBalance((prev) => Math.max(0, prev - authoritativeTotal))
+        const feeNum = Number(estimatedFee.replace(/,/g, "")) || 0
+        setWalletBalance((prev) => Math.max(0, prev - feeNum))
       }
 
       try {
@@ -1302,10 +982,6 @@ export default function SendPackageFlow({
 
       setCountdown(40)
       setTransitCountdown(1563)
-      liveEtaDeadlineRef.current = null
-      setLiveEtaDeadline(null)
-      setEtaClock(Date.now())
-      lastEtaDistanceRef.current = null
       setIsPackageArrived(false)
       setShowCancelModal(false)
       setShowDropOffCodeModal(false)
@@ -1325,28 +1001,20 @@ export default function SendPackageFlow({
   }
 
   const handleCancelDelivery = async () => {
-    if (isCancelling) return
-    setIsCancelling(true)
-    setCancelError(null)
-    try {
-      const orderId = activeOrderId || initialPackageDetails?.orderId
-      if (orderId) {
-        await ordersApi.cancelOrder(orderId, "Customer cancelled delivery")
+    setShowCancelModal(false)
+    setIsCancelled(true)
+    setShowCancelledToast(true)
+    if (activeOrderId) {
+      try {
+        await ordersApi.cancelOrder(activeOrderId, "Customer cancelled delivery")
+      } catch (e) {
+        console.warn("[SendPackageFlow] Cancel order note:", e)
       }
-      setShowCancelModal(false)
-      setIsCancelled(true)
-      setShowCancelledToast(true)
-      setTimeout(() => {
-        setShowCancelledToast(false)
-        onBack()
-      }, 3200)
-    } catch (error) {
-      setCancelError(
-        error instanceof Error ? error.message : "Could not cancel this delivery.",
-      )
-    } finally {
-      setIsCancelling(false)
     }
+    setTimeout(() => {
+      setShowCancelledToast(false)
+      onBack()
+    }, 3200)
   }
 
   const handleRiderAccept = async () => {
@@ -1425,7 +1093,7 @@ export default function SendPackageFlow({
 
   return (
     <div
-      className={`w-full max-w-xl mx-auto flex-1 flex flex-col min-h-full bg-transparent relative transition-colors ${
+      className={`w-full max-w-xl mx-auto flex-1 flex flex-col min-h-full h-full bg-transparent relative transition-colors ${
         screen === "success" || screen === "package_status"
           ? "pb-0"
           : "pb-28 md:pb-16"
@@ -2220,73 +1888,21 @@ export default function SendPackageFlow({
                 <div className="flex-1 flex flex-col justify-between min-w-0">
                   {/* FROM Row */}
                   <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1 pr-3">
+                    <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 block">
-                        PICKUP LOCATION
+                        FROM
                       </span>
-                      <input
-                        type="text"
-                        value={fromLocation}
-                        onChange={(event) => {
-                          setFromLocation(event.target.value)
-                          setPickupCoordinates(null)
-                          setPickupLocationError(null)
-                        }}
-                        placeholder="Type your pickup address"
-                        aria-label="Pickup location"
-                        className="w-full mt-1 bg-transparent text-[15px] font-bold text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleUseCurrentPickupLocation}
-                        disabled={isLocatingPickup}
-                        className="inline-flex items-center gap-1.5 mt-2 text-xs font-semibold text-amber-600 dark:text-yellow-400 disabled:opacity-60"
-                      >
-                        {isLocatingPickup ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Navigation className="w-3.5 h-3.5" />
-                        )}
-                        {isLocatingPickup ? "Finding location..." : "Use my current location"}
-                      </button>
-                      {pickupLocationError && (
-                        <p role="alert" className="text-xs text-red-600 dark:text-red-400 mt-1">
-                          {pickupLocationError}
-                        </p>
-                      )}
-                      {savedAddresses.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          {savedAddresses.slice(0, 5).map((address) => {
-                            const addressLabel = `${address.street}${address.city ? `, ${address.city}` : ""}`
-                            return (
-                              <button
-                                key={address.id}
-                                type="button"
-                                onClick={() => {
-                                  setFromLocation(addressLabel)
-                                  setPickupCoordinates({
-                                    lat: address.latitude,
-                                    lng: address.longitude,
-                                  })
-                                  setPickupLocationError(null)
-                                }}
-                                className="max-w-full truncate rounded-full bg-gray-100 dark:bg-white/10 px-3 py-1.5 text-[11px] font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/15"
-                                title={`Use ${address.title || address.street} as pickup`}
-                              >
-                                {address.title || address.street}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
+                      <h4 className="text-[15px] font-bold text-gray-900 dark:text-white leading-snug">
+                        {fromLocation || "Select pickup location"}
+                      </h4>
+                      <span className="text-xs font-semibold text-amber-500 dark:text-yellow-400 block mt-0.5">
+                        Current Location
+                      </span>
                     </div>
 
                     <button
                       type="button"
-                      onClick={() => {
-                        setFromLocation("")
-                        setPickupCoordinates(null)
-                      }}
+                      onClick={() => setFromLocation("")}
                       className="w-5 h-5 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors cursor-pointer mt-1"
                       title="Clear origin"
                     >
@@ -2338,33 +1954,12 @@ export default function SendPackageFlow({
               {/* Estimated Fee Separator & Row */}
               <div className="border-t border-gray-100 dark:border-white/5 pt-4 mt-5 flex items-center justify-between">
                 <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">
-                  Backend delivery quote
+                  Estimated Fee
                 </span>
-                <span
-                  aria-live="polite"
-                  className="text-lg font-bold text-gray-950 dark:text-white"
-                >
-                  {isCalculatingQuote
-                    ? "Calculating..."
-                    : estimatedFee
-                      ? `₦${estimatedFee}`
-                      : quoteError
-                        ? "Unavailable"
-                        : "Select a destination"}
+                <span className="text-lg font-bold text-gray-950 dark:text-white">
+                  ₦{estimatedFee}
                 </span>
               </div>
-              {quoteError && (
-                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-rose-600 dark:text-rose-400">
-                  <span>{quoteError}</span>
-                  <button
-                    type="button"
-                    onClick={() => recalculateQuote()}
-                    className="shrink-0 font-bold underline underline-offset-2"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
             </div>
 
             {/* Recent & Add Address Section */}
@@ -2394,6 +1989,7 @@ export default function SendPackageFlow({
                       type="button"
                       onClick={() => {
                         setToLocation(addrText)
+                        recalculateQuote(fromLocation, addrText)
                       }}
                       className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer group"
                     >
@@ -2438,6 +2034,7 @@ export default function SendPackageFlow({
                       type="button"
                       onClick={() => {
                         setToLocation("Iyapki, south Ibie")
+                        recalculateQuote(fromLocation, "Iyapki, south Ibie")
                       }}
                       className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer group"
                     >
@@ -2456,6 +2053,7 @@ export default function SendPackageFlow({
                       type="button"
                       onClick={() => {
                         setToLocation("Auchi, Igbe Road")
+                        recalculateQuote(fromLocation, "Auchi, Igbe Road")
                       }}
                       className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer group"
                     >
@@ -2497,11 +2095,9 @@ export default function SendPackageFlow({
                     alert("Please select or add a destination address.")
                     return
                   }
-                  if (isCalculatingQuote || !estimatedFee || quoteError) return
                   setScreen("choose_rider")
                 }}
-                disabled={isCalculatingQuote || !estimatedFee || Boolean(quoteError)}
-                className="w-full py-4 px-5 rounded-2xl bg-[#FFCC00] hover:bg-[#f5c400] active:scale-[0.99] text-gray-950 font-bold text-base transition-all shadow-xs flex items-center justify-center cursor-pointer touch-manipulation disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full py-4 px-5 rounded-2xl bg-[#FFCC00] hover:bg-[#f5c400] active:scale-[0.99] text-gray-950 font-bold text-base transition-all shadow-xs flex items-center justify-center cursor-pointer touch-manipulation"
               >
                 <span>Book Rider</span>
               </button>
@@ -2582,6 +2178,7 @@ export default function SendPackageFlow({
                   setSelectedNewLocation("Auchi, Igbe Road")
                   setToLocation("Auchi, Igbe Road")
                   setNewLocationSearch("Auchi, Igbe Road")
+                  recalculateQuote(fromLocation, "Auchi, Igbe Road")
                 }}
                 className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer"
               >
@@ -2620,6 +2217,7 @@ export default function SendPackageFlow({
                   setSelectedNewLocation("Auchi delta Terminal")
                   setToLocation("Auchi delta Terminal")
                   setNewLocationSearch("Auchi delta Terminal")
+                  recalculateQuote(fromLocation, "Auchi delta Terminal")
                 }}
                 className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer"
               >
@@ -2658,6 +2256,7 @@ export default function SendPackageFlow({
                   setSelectedNewLocation("Iyapki, south Ibie")
                   setToLocation("Iyapki, south Ibie")
                   setNewLocationSearch("Iyapki, south Ibie")
+                  recalculateQuote(fromLocation, "Iyapki, south Ibie")
                 }}
                 className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer"
               >
@@ -2710,6 +2309,7 @@ export default function SendPackageFlow({
                           setSelectedNewLocation(addrText)
                           setToLocation(addrText)
                           setNewLocationSearch(addrText)
+                          recalculateQuote(fromLocation, addrText)
                         }}
                         className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer"
                       >
@@ -2758,7 +2358,7 @@ export default function SendPackageFlow({
                     setToLocation("Auchi, Edo State")
                     setSelectedNewLocation("Auchi, Edo State")
                     setNewLocationSearch("Auchi, Edo State")
-                    setToLocation("Auchi, Edo State")
+                    recalculateQuote(fromLocation, "Auchi, Edo State")
                   }}
                   className="w-full p-4 flex items-center gap-3 text-left hover:bg-gray-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer"
                 >
@@ -2777,7 +2377,7 @@ export default function SendPackageFlow({
                     setToLocation("Benin")
                     setSelectedNewLocation("Benin")
                     setNewLocationSearch("Benin")
-                    setToLocation("Benin")
+                    recalculateQuote(fromLocation, "Benin")
                   }}
                   className="w-full p-4 flex items-center gap-3 text-left hover:bg-gray-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer"
                 >
@@ -2792,11 +2392,10 @@ export default function SendPackageFlow({
             </div>
 
             {/* Save to address book toggle */}
-            <label className={`flex items-center gap-3 p-4 bg-white dark:bg-[#161618] rounded-2xl border border-gray-200/90 dark:border-white/10 select-none shadow-2xs ${savedAddresses.length >= 5 ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
+            <label className="flex items-center gap-3 p-4 bg-white dark:bg-[#161618] rounded-2xl border border-gray-200/90 dark:border-white/10 cursor-pointer select-none shadow-2xs">
               <input
                 type="checkbox"
-                checked={saveToBook && savedAddresses.length < 5}
-                disabled={savedAddresses.length >= 5}
+                checked={saveToBook}
                 onChange={(e) => setSaveToBook(e.target.checked)}
                 className="w-4 h-4 rounded text-yellow-500 focus:ring-yellow-400 cursor-pointer accent-[#FFCC00]"
               />
@@ -2805,9 +2404,7 @@ export default function SendPackageFlow({
                   Save to address book
                 </span>
                 <span className="text-gray-500 dark:text-gray-400 block mt-0.5">
-                  {savedAddresses.length >= 5
-                    ? "Address book is full (maximum 5). You can still use this location for the delivery."
-                    : "Save this destination to your account for future orders"}
+                  Save this destination to your account for future orders
                 </span>
               </div>
             </label>
@@ -3530,17 +3127,13 @@ export default function SendPackageFlow({
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="text-xl font-bold text-gray-950 dark:text-white">
-                        {isCalculatingQuote
-                          ? "Calculating..."
-                          : estimatedFee
-                            ? `₦${estimatedFee}`
-                            : "Quote unavailable"}
+                        ₦{estimatedFee || "1,500"}
                       </span>
                       <button
                         type="button"
                         onClick={() =>
                           copyToClipboard(
-                            `₦${estimatedFee}`,
+                            `₦${estimatedFee || "1,500"}`,
                             "Estimated fee",
                           )
                         }
@@ -3569,8 +3162,7 @@ export default function SendPackageFlow({
                   <button
                     type="button"
                     onClick={() => setScreen("payment_method")}
-                    disabled={isCalculatingQuote || !estimatedFee || Boolean(quoteError)}
-                    className="w-full py-4 px-5 rounded-2xl bg-[#FFCC00] hover:bg-[#f5c400] active:scale-[0.99] text-gray-950 font-bold text-base transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer touch-manipulation disabled:cursor-not-allowed disabled:opacity-60"
+                    className="w-full py-4 px-5 rounded-2xl bg-[#FFCC00] hover:bg-[#f5c400] active:scale-[0.99] text-gray-950 font-bold text-base transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer touch-manipulation"
                   >
                     <span>Continue to Payment</span>
                     <ArrowRight className="w-5 h-5 stroke-[2.2]" />
@@ -3784,7 +3376,7 @@ export default function SendPackageFlow({
                 Total Amount
               </span>
               <span className="text-xl font-bold text-gray-950 dark:text-white">
-                {estimatedFee ? `₦${estimatedFee}` : "Quote unavailable"}
+                ₦{estimatedFee}
               </span>
             </div>
 
@@ -3798,11 +3390,11 @@ export default function SendPackageFlow({
               <button
                 type="button"
                 onClick={handleConfirmPayment}
-                disabled={isConfirmingPayment || isCalculatingQuote || !estimatedFee || Boolean(quoteError)}
+                disabled={isConfirmingPayment}
                 className="w-full py-4 px-5 rounded-2xl bg-[#FFCC00] hover:bg-[#f5c400] active:scale-[0.99] text-gray-950 font-bold text-base transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer touch-manipulation disabled:cursor-wait disabled:opacity-60"
               >
                 <Check className="w-5 h-5 stroke-[3]" />
-                <span>{isConfirmingPayment ? "Processing..." : "Confirm Payment Method"}</span>
+                <span>{isConfirmingPayment ? "Processing..." : `Confirm Payment Method (₦${estimatedFee})`}</span>
               </button>
             </div>
           </div>
@@ -3814,104 +3406,7 @@ export default function SendPackageFlow({
       {/* ========================================================================= */}
       {screen === "package_status" &&
         (() => {
-          const fallbackRider = getSelectedRider()
-          const liveRider =
-            liveOrderStatus?.rider?.name &&
-            liveOrderStatus.rider.name !== "Pending Rider Assignment"
-              ? liveOrderStatus.rider
-              : null
-          const riderInfo = liveRider
-            ? liveRider
-            : initialPackageDetails?.rider
-              ? {
-                  name: initialPackageDetails.rider.name,
-                  avatar: initialPackageDetails.rider.avatar,
-                  rating: initialPackageDetails.rider.rating,
-                  reviews: initialPackageDetails.rider.reviewCount,
-                  distanceKm: undefined,
-                  plateNumber: initialPackageDetails.rider.plateNumber,
-                }
-              : null
-          const isRestoredOrder = Boolean(initialPackageDetails?.orderId)
-          const chosenRider: Rider = riderInfo
-            ? {
-                ...fallbackRider,
-                id: riderInfo.id || initialPackageDetails?.rider?.idCode || fallbackRider.id,
-                name: riderInfo.name || "Assigned Rider",
-                avatar: riderInfo.avatar || "",
-                rating: riderInfo.rating ?? 0,
-                reviews: riderInfo.reviews ?? 0,
-                etaMinutes: riderInfo.etaMinutes ?? fallbackRider.etaMinutes,
-                distanceKm: riderInfo.distanceKm,
-                plateNumber:
-                  riderInfo.plateNumber ||
-                  (isRestoredOrder ? undefined : fallbackRider.plateNumber),
-              }
-            : isRestoredOrder
-              ? {
-                  ...fallbackRider,
-                  name: "Rider details unavailable",
-                  avatar: "",
-                }
-              : fallbackRider
-          const displayTrackingId =
-            liveOrderStatus?.trackingId ||
-            activeOrderTrackingId ||
-            initialPackageDetails?.trackingId ||
-            "Tracking ID unavailable"
-          const displayPackageName =
-            liveOrderStatus?.packageName ||
-            initialPackageDetails?.packageName ||
-            packageName ||
-            "Delivery Package"
-          const currentOrderStatus =
-            liveOrderStatus?.status || initialPackageDetails?.status
-          const isLiveOrder = Boolean(activeOrderId || initialPackageDetails?.orderId)
-          const displayStatus = isCancelled
-            ? "CANCELLED"
-            : isPackageArrived
-              ? "DELIVERED"
-              : liveOrderStatus?.isArrivalImminent
-                ? "RIDER NEARBY"
-                : currentOrderStatus === "PICKUP_PENDING"
-                  ? "RIDER TO PICKUP"
-                  : currentOrderStatus === "PICKED_UP" || currentOrderStatus === "IN_TRANSIT"
-                    ? "IN-TRANSIT"
-                    : isRiderAccepted
-                      ? "RIDER TO PICKUP"
-                      : "PENDING"
-          const hasPickedUp =
-            !isLiveOrder ||
-            Boolean(
-              currentOrderStatus &&
-                [
-                  "PICKED_UP",
-                  "IN_TRANSIT",
-                  "DELIVERED",
-                  "CUSTOMER_CONFIRMED",
-                  "SETTLED",
-                ].includes(currentOrderStatus),
-            )
-          const hasDelivered =
-            isPackageArrived ||
-            Boolean(
-              currentOrderStatus &&
-                ["DELIVERED", "CUSTOMER_CONFIRMED", "SETTLED"].includes(
-                  currentOrderStatus,
-                ),
-            )
-          const hasArrivedNearDestination =
-            Boolean(liveOrderStatus?.isArrivalImminent) || hasDelivered
-          const liveEtaRemaining = isLiveOrder
-            ? liveEtaDeadline === null
-              ? null
-              : Math.max(0, Math.ceil((liveEtaDeadline - etaClock) / 1000))
-            : transitCountdown
-          const canCancelOngoingOrder =
-            !isPackageArrived &&
-            !isCancelled &&
-            liveEtaRemaining === 0
-          const canCancelPendingOrder = countdown === 0 && !isCancelled
+          const chosenRider = getSelectedRider()
 
           if (showRiderChat) {
             return (
@@ -4148,38 +3643,24 @@ export default function SendPackageFlow({
           }
 
           return (
-            <div className="w-full flex-1 flex flex-col animate-in fade-in duration-200 bg-[#fcfcfc] dark:bg-[#0c0c0e] rounded-none pb-6 sm:pb-8">
+            <div className="w-full flex-1 flex flex-col animate-in fade-in duration-200 min-h-full h-full overflow-y-auto bg-[#fcfcfc] dark:bg-[#0c0c0e] rounded-none pb-24">
               {/* Top Hero Image with Dark Gradient & Controls (Click to expand full image) */}
               <div
-                onClick={() => {
-                  if (packagePhoto) setShowExpandedImage(true)
-                }}
-                className={`relative w-full h-[260px] sm:h-[290px] bg-neutral-900 overflow-hidden shrink-0 group select-none ${
-                  packagePhoto ? "cursor-pointer" : ""
-                }`}
-                title={packagePhoto ? "Click to view complete full image" : undefined}
+                onClick={() => setShowExpandedImage(true)}
+                className="relative w-full h-[320px] sm:h-[350px] bg-neutral-900 overflow-hidden shrink-0 cursor-pointer group select-none"
+                title="Click to view complete full image"
               >
-                {packagePhoto ? (
-                  <img
-                    src={packagePhoto}
-                    alt={displayPackageName}
-                    onError={(event) => {
-                      event.currentTarget.style.display = "none"
-                    }}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-white/40">
-                    <Package className="h-16 w-16" aria-hidden="true" />
-                  </div>
-                )}
+                <img
+                  src={capturedImage?.previewUrl || defaultPixelPhoto}
+                  alt={packageName || "Delivery Package"}
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                />
 
                 {/* Top & Bottom Gradient Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/85 pointer-events-none" />
 
                 {/* Floating "Tap to expand" badge */}
-                {packagePhoto && (
-                <div className="absolute top-14 sm:top-16 right-4 sm:right-6 z-20 pointer-events-auto">
+                <div className="absolute top-16 right-4 sm:right-6 z-20 pointer-events-auto">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -4195,10 +3676,9 @@ export default function SendPackageFlow({
                     </span>
                   </button>
                 </div>
-                )}
 
                 {/* Floating Top Navigation Header */}
-                <div className="absolute top-0 left-0 right-0 px-4 sm:px-5 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-3 flex items-center justify-between z-20 pointer-events-auto">
+                <div className="absolute top-0 left-0 right-0 px-4 sm:px-5 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-3 flex items-center justify-between z-20 pointer-events-auto">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -4233,18 +3713,18 @@ export default function SendPackageFlow({
                 </div>
 
                 {/* Hero Bottom Information (Package Title, Tracking Code, Status Badge) */}
-                <div className="absolute bottom-4 sm:bottom-5 left-0 right-0 px-4 sm:px-6 flex items-end justify-between z-10 pointer-events-auto">
+                <div className="absolute bottom-6 left-0 right-0 px-6 flex items-end justify-between z-10 pointer-events-auto">
                   <div className="min-w-0 pr-3">
-                    <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight leading-tight truncate">
-                      {displayPackageName}
+                    <h2 className="text-2xl font-bold text-white tracking-tight leading-tight truncate">
+                      {packageName || "Delivery Package"}
                     </h2>
                     <div className="flex items-center gap-1.5 text-white/80 text-xs sm:text-sm mt-1">
-                      <span className="font-medium">{displayTrackingId}</span>
+                      <span className="font-medium">MV324-H247P</span>
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation()
-                          copyToClipboard(displayTrackingId, "Tracking Code")
+                          copyToClipboard("MV324-H247P", "Tracking Code")
                         }}
                         className="hover:text-white transition-colors cursor-pointer p-0.5"
                         title="Copy Tracking ID"
@@ -4258,18 +3738,20 @@ export default function SendPackageFlow({
                     className={`px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase shrink-0 ${
                       isCancelled
                         ? "bg-red-500 text-white"
-                        : isPackageArrived
-                          ? "bg-emerald-500 text-white"
                         : "bg-yellow-400 text-black shadow-xs"
                     }`}
                   >
-                    {displayStatus}
+                    {isCancelled
+                      ? "CANCELLED"
+                      : isRiderAccepted
+                        ? "IN-TRANSIT"
+                        : "PENDING"}
                   </span>
                 </div>
               </div>
 
               {/* White / Dark Card Body */}
-              <div className="flex-1 bg-white dark:bg-[#161618] rounded-none mt-0 pt-5 sm:pt-6 pb-6 sm:pb-8 px-4 sm:px-8 relative z-10 shadow-sm flex flex-col justify-between transition-colors">
+              <div className="flex-1 bg-white dark:bg-[#161618] rounded-none mt-0 pt-6 pb-12 px-4 sm:px-8 relative z-10 shadow-sm flex flex-col justify-between transition-colors">
                 <div>
                   {/* Condition: Rider Accepted / IN-TRANSIT (Matches Image 1 and Image 2) */}
                   {isRiderAccepted ? (
@@ -4281,25 +3763,17 @@ export default function SendPackageFlow({
                             Package status
                           </h3>
                           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                            {isPackageArrived
-                              ? "Your package has been delivered"
-                              : hasArrivedNearDestination
-                                ? "Your rider is near the delivery location"
-                              : "Your package is on the way"}
+                            Your package is on the way
                           </p>
                         </div>
 
                         {/* Yellow Timer Pill */}
-                        <div className="px-3.5 py-1.5 rounded-xl bg-[#FFCC00] text-gray-950 font-bold text-xs sm:text-sm border border-black/80 flex items-center gap-1.5 shadow-xs shrink-0">
+                        <div className="px-3.5 py-1.5 rounded-xl bg-[#FFCC00] text-gray-950 font-bold text-sm sm:text-base border border-black/80 flex items-center gap-1.5 shadow-xs shrink-0">
                           <Timer className="w-4 h-4 text-gray-950 stroke-[2.5]" />
                           <span>
                             {isPackageArrived
-                              ? "Delivered"
-                              : liveEtaRemaining === null
-                                ? isLiveOrder
-                                  ? "Locating rider"
-                                  : "Estimating"
-                                : formatTransitTime(liveEtaRemaining)}
+                              ? "00:00"
+                              : formatTransitTime(transitCountdown)}
                           </span>
                         </div>
                       </div>
@@ -4317,9 +3791,7 @@ export default function SendPackageFlow({
                             </span>
                           </div>
                           <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">
-                            {isLiveOrder
-                              ? formatMilestoneTime(liveOrderStatus?.milestones?.riderEnRouteAt)
-                              : "In progress"}
+                            2:30PM
                           </span>
                         </div>
 
@@ -4329,20 +3801,15 @@ export default function SendPackageFlow({
                         {/* Step 2: Package Collected */}
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 shadow-xs ${hasPickedUp ? "bg-[#FFCC00]" : "border-2 border-gray-300 dark:border-gray-600"}`}>
-                              {hasPickedUp && <Check className="w-3 h-3 text-white stroke-[3.5]" />}
+                            <div className="w-5 h-5 rounded-full bg-[#FFCC00] flex items-center justify-center shrink-0 shadow-xs">
+                              <Check className="w-3 h-3 text-white stroke-[3.5]" />
                             </div>
                             <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
                               Package Collected
                             </span>
                           </div>
                           <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">
-                            {isLiveOrder
-                              ? formatMilestoneTime(liveOrderStatus?.milestones?.packageCollectedAt) ||
-                                (hasPickedUp ? "" : "Waiting")
-                              : hasPickedUp
-                                ? "Collected"
-                                : "--"}
+                            2:35PM
                           </span>
                         </div>
 
@@ -4352,26 +3819,18 @@ export default function SendPackageFlow({
                         {/* Step 3: Package has arrived */}
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${hasArrivedNearDestination ? "bg-emerald-500" : "border-2 border-gray-900 dark:border-gray-300"}`}>
-                              {hasArrivedNearDestination && <Check className="w-3 h-3 text-white stroke-[3.5]" />}
-                            </div>
+                            <div className="w-5 h-5 rounded-full border-2 border-gray-900 dark:border-gray-300 flex items-center justify-center shrink-0" />
                             <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
                               Package has arrived
                             </span>
                           </div>
                           <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">
-                            {isLiveOrder
-                              ? formatMilestoneTime(liveOrderStatus?.milestones?.packageArrivedAt) ||
-                                (hasArrivedNearDestination ? "" : "On the way")
-                              : hasArrivedNearDestination
-                                ? "Arrived"
-                                : "--"}
+                            --
                           </span>
                         </div>
                       </div>
 
                       {/* Rider's Information Card */}
-                      {(!isRestoredOrder || riderInfo) && (
                       <div className="bg-gray-50/90 dark:bg-[#1f1f23] p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-white/5 space-y-3.5 mb-6">
                         <h4 className="font-bold text-base text-gray-900 dark:text-white">
                           Rider’s information
@@ -4381,10 +3840,7 @@ export default function SendPackageFlow({
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <img
-                              src={
-                                chosenRider.avatar ||
-                                `https://ui-avatars.com/api/?name=${encodeURIComponent(chosenRider.name)}&background=ffcc00&color=000000`
-                              }
+                              src={chosenRider.avatar || divineAvatar}
                               alt={chosenRider.name}
                               className="w-12 h-12 rounded-full object-cover shrink-0 border border-gray-200/80 dark:border-white/10"
                             />
@@ -4393,19 +3849,13 @@ export default function SendPackageFlow({
                                 {chosenRider.name}
                               </h5>
                               <div className="flex items-center gap-1 text-xs text-gray-700 dark:text-gray-300 mt-0.5">
-                                {chosenRider.rating > 0 ? (
-                                  <>
-                                    <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                                    <span className="font-bold">
-                                      {chosenRider.rating}
-                                    </span>
-                                    <span className="text-gray-500">
-                                      ({chosenRider.reviews} deliveries)
-                                    </span>
-                                  </>
-                                ) : (
-                                  <span className="text-gray-500">Rating unavailable</span>
-                                )}
+                                <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                                <span className="font-bold">
+                                  {chosenRider.rating}
+                                </span>
+                                <span className="text-gray-500">
+                                  ({chosenRider.reviews || 32})
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -4422,7 +3872,6 @@ export default function SendPackageFlow({
                         </div>
 
                         {/* Distance Slider Progress Bar */}
-                        {!isRestoredOrder && (
                         <div className="relative w-full py-2">
                           <div className="relative flex items-center w-full h-1.5 bg-transparent">
                             {/* Solid Black Track */}
@@ -4455,7 +3904,6 @@ export default function SendPackageFlow({
                             )}
                           </div>
                         </div>
-                        )}
 
                         {/* Price Row */}
                         <div className="flex items-center justify-between text-sm pt-0.5">
@@ -4477,31 +3925,21 @@ export default function SendPackageFlow({
                           </div>
                         </div>
                       </div>
-                      )}
 
                       {/* Bottom Action Buttons: Package Received & Flag */}
                       <div className="flex items-center gap-3 pt-2">
-                        {isTransactionComplete ? (
-                          <div
-                            role="status"
-                            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300"
-                          >
-                            <CheckCircle2 className="h-5 w-5 shrink-0" />
-                            <span>Delivered · Payment released</span>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setShowDropOffCodeModal(true)}
-                            className={`flex-1 py-4 px-5 rounded-2xl font-bold text-base transition-all flex items-center justify-center cursor-pointer active:scale-[0.99] ${
-                              isPackageArrived
-                                ? "bg-[#FFCC00] hover:bg-[#f5c400] text-gray-950 shadow-xs"
-                                : "bg-[#FFF4C7] hover:bg-[#ffefa8] text-gray-900 dark:bg-[#2c2612] dark:text-amber-100 shadow-2xs"
-                            }`}
-                          >
-                            <span>Package Received</span>
-                          </button>
-                        )}
+                        {/* Package Received Button (Opens Drop-off Confirmation Code Modal) */}
+                        <button
+                          type="button"
+                          onClick={() => setShowDropOffCodeModal(true)}
+                          className={`flex-1 py-4 px-5 rounded-2xl font-bold text-base transition-all flex items-center justify-center cursor-pointer active:scale-[0.99] ${
+                            isPackageArrived
+                              ? "bg-[#FFCC00] hover:bg-[#f5c400] text-gray-950 shadow-xs"
+                              : "bg-[#FFF4C7] hover:bg-[#ffefa8] text-gray-900 dark:bg-[#2c2612] dark:text-amber-100 shadow-2xs"
+                          }`}
+                        >
+                          <span>Package Received</span>
+                        </button>
 
                         {/* Flag / Report Issue Button */}
                         <button
@@ -4514,27 +3952,41 @@ export default function SendPackageFlow({
                         </button>
                       </div>
 
-                      {!isTransactionComplete && !isPackageArrived && (
+                      {/* Test helper links for demo */}
+                      <div className="flex items-center justify-between text-[11px] text-gray-400 px-1 pt-3 gap-2 flex-wrap">
                         <button
                           type="button"
-                          disabled={!canCancelOngoingOrder || isCancelling}
-                          onClick={() => {
-                            setCancelError(null)
-                            setShowCancelModal(true)
-                          }}
-                          className={`mt-3 w-full rounded-2xl border px-5 py-3 text-sm font-semibold transition-colors ${
-                            canCancelOngoingOrder && !isCancelling
-                              ? "border-red-300 text-red-600 hover:bg-red-50 dark:border-red-500/40 dark:text-red-400 dark:hover:bg-red-500/10"
-                              : "cursor-not-allowed border-gray-200 text-gray-400 dark:border-white/10 dark:text-gray-500"
-                          }`}
+                          onClick={() => setIsPackageArrived((prev) => !prev)}
+                          className="text-yellow-600 dark:text-yellow-400 font-semibold hover:underline underline-offset-2 cursor-pointer"
                         >
-                          {canCancelOngoingOrder
-                            ? "Cancel delivery"
-                            : liveEtaRemaining === null
-                              ? "Waiting for fresh rider location"
-                              : `Cancel delivery when ETA reaches 00:00 (${formatTransitTime(liveEtaRemaining)})`}
+                          Test: Toggle Arrived (
+                          {isPackageArrived
+                            ? "00:00 [Image 2]"
+                            : "26:03 [Image 1]"}
+                          )
                         </button>
-                      )}
+                        <button
+                          type="button"
+                          onClick={() => setShowDropOffCodeModal(true)}
+                          className="text-amber-600 dark:text-amber-400 font-semibold hover:underline underline-offset-2 cursor-pointer"
+                        >
+                          Test: Drop-off Code (3018)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setScreen("success")}
+                          className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline underline-offset-2 cursor-pointer"
+                        >
+                          Test: Success Screen
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsRiderAccepted(false)}
+                          className="hover:text-gray-700 dark:hover:text-gray-300 underline underline-offset-2 cursor-pointer"
+                        >
+                          Test: Back to Pending State
+                        </button>
+                      </div>
                     </>
                   ) : (
                     <>
@@ -4546,7 +3998,7 @@ export default function SendPackageFlow({
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                           {isCancelled
                             ? "This delivery has been cancelled"
-                            : "Waiting for a rider to accept"}
+                            : "Waiting for ride to accept"}
                         </p>
                       </div>
 
@@ -4582,7 +4034,6 @@ export default function SendPackageFlow({
                       <div className="border-b border-dashed border-gray-200 dark:border-white/10 my-6" />
 
                       {/* Rider's Information Card */}
-                      {(!isRestoredOrder || riderInfo) && (
                       <div className="bg-gray-50/90 dark:bg-[#1f1f23] p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-white/5 space-y-3.5 mb-8">
                         <h4 className="font-bold text-base text-gray-900 dark:text-white">
                           Rider’s information
@@ -4592,10 +4043,7 @@ export default function SendPackageFlow({
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3.5 min-w-0">
                             <img
-                              src={
-                                chosenRider.avatar ||
-                                `https://ui-avatars.com/api/?name=${encodeURIComponent(chosenRider.name)}&background=ffcc00&color=000000`
-                              }
+                              src={chosenRider.avatar || divineAvatar}
                               alt={chosenRider.name}
                               className="w-12 h-12 rounded-full object-cover shrink-0 border border-gray-200/80 dark:border-white/10"
                             />
@@ -4605,21 +4053,21 @@ export default function SendPackageFlow({
                               </h5>
                               <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                                 <span className="truncate font-mono">
-                                  {chosenRider.plateNumber || "License plate unavailable"}
+                                  {chosenRider.plateNumber || `#${chosenRider.id.toUpperCase()}-DART`}
                                 </span>
-                                {chosenRider.plateNumber && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      chosenRider.plateNumber &&
-                                      copyToClipboard(chosenRider.plateNumber, "Rider Plate")
-                                    }
-                                    className="hover:text-gray-700 dark:hover:text-gray-300 p-0.5 cursor-pointer"
-                                    title="Copy Rider Plate"
-                                  >
-                                    <Copy className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    copyToClipboard(
+                                      chosenRider.plateNumber || `#${chosenRider.id.toUpperCase()}-DART`,
+                                      "Rider Plate",
+                                    )
+                                  }
+                                  className="hover:text-gray-700 dark:hover:text-gray-300 p-0.5 cursor-pointer"
+                                  title="Copy Rider Plate"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </div>
                           </div>
@@ -4644,16 +4092,10 @@ export default function SendPackageFlow({
                             Rating :
                           </span>
                           <div className="flex items-center gap-1 font-bold text-gray-900 dark:text-white">
-                            {chosenRider.rating > 0 ? (
-                              <>
-                                <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                                <span>
-                                  {chosenRider.rating} ({chosenRider.reviews} deliveries)
-                                </span>
-                              </>
-                            ) : (
-                              <span>Rating unavailable</span>
-                            )}
+                            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                            <span>
+                              {chosenRider.rating} ({chosenRider.reviews || 32})
+                            </span>
                           </div>
                         </div>
 
@@ -4677,35 +4119,8 @@ export default function SendPackageFlow({
                           </div>
                         </div>
                       </div>
-                      )}
 
                       {/* Bottom Actions for Pending State */}
-                      {isRestoredOrder ? (
-                        <div className="space-y-3 pt-4">
-                          <p
-                            role="status"
-                            className="text-center text-sm text-gray-500 dark:text-gray-400"
-                          >
-                            This order status refreshes automatically from the server.
-                          </p>
-                          <button
-                            type="button"
-                            disabled={!canCancelPendingOrder || isCancelling}
-                            onClick={() => {
-                              setCancelError(null)
-                              setShowCancelModal(true)
-                            }}
-                            className={`w-full text-center text-xs underline underline-offset-2 font-medium ${
-                              !canCancelPendingOrder || isCancelling
-                                ? "cursor-not-allowed text-gray-400"
-                                : "cursor-pointer text-red-500 hover:text-red-600 dark:hover:text-red-400"
-                            }`}
-                          >
-                            Cancel delivery request{" "}
-                            {countdown > 0 ? `(${formatCountdown(countdown)})` : ""}
-                          </button>
-                        </div>
-                      ) : (
                       <div className="space-y-3 pt-2 w-full">
                         {/* 2 Buttons: Choose a new rider & Wait (stacked on mobile, side-by-side on desktop) */}
                         <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
@@ -4750,23 +4165,45 @@ export default function SendPackageFlow({
                         <div className="text-center pt-0.5">
                           <button
                             type="button"
-                            disabled={!canCancelPendingOrder || isCancelling}
-                            onClick={() => {
-                              setCancelError(null)
-                              setShowCancelModal(true)
-                            }}
-                            className={`text-xs underline underline-offset-2 font-medium ${
-                              !canCancelPendingOrder || isCancelling
-                                ? "cursor-not-allowed text-gray-400"
-                                : "cursor-pointer text-red-500 hover:text-red-600 dark:hover:text-red-400"
-                            }`}
+                            onClick={() => setShowCancelModal(true)}
+                            className="text-xs text-red-500 hover:text-red-600 dark:hover:text-red-400 underline underline-offset-2 cursor-pointer font-medium"
                           >
-                            Cancel delivery request{" "}
-                            {countdown > 0 ? `(${formatCountdown(countdown)})` : ""}
+                            Cancel delivery request {countdown > 0 ? `(${countdown}s)` : ""}
+                          </button>
+                        </div>
+
+                        {/* Test helper links for demo */}
+                        <div className="flex items-center justify-between text-[11px] text-gray-400 px-1 pt-1 gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setCountdown(0)}
+                            className="hover:text-gray-700 dark:hover:text-gray-300 underline underline-offset-2 cursor-pointer"
+                          >
+                            Test: Expire counter (0s)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCountdown(40)}
+                            className="hover:text-gray-700 dark:hover:text-gray-300 underline underline-offset-2 cursor-pointer"
+                          >
+                            Test: Reset counter (40s)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowCancelModal(true)}
+                            className="text-red-500 font-semibold hover:underline underline-offset-2 cursor-pointer"
+                          >
+                            Test: Cancel Modal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleRiderAccept}
+                            className="text-yellow-600 dark:text-yellow-400 font-semibold hover:underline underline-offset-2 cursor-pointer"
+                          >
+                            Test: Rider Accepts (API)
                           </button>
                         </div>
                       </div>
-                      )}
                     </>
                   )}
                 </div>
@@ -4793,20 +4230,14 @@ export default function SendPackageFlow({
                       <br />
                       cancel this Request?
                     </h3>
-                    {cancelError && (
-                      <p role="alert" className="mb-4 text-sm text-red-600 dark:text-red-400">
-                        {cancelError}
-                      </p>
-                    )}
 
                     {/* Action Buttons */}
                     <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-3.5 w-full">
                       {/* Top Yellow Button: No Go Back */}
                       <button
                         type="button"
-                        disabled={isCancelling}
                         onClick={() => setShowCancelModal(false)}
-                        className="w-full sm:flex-1 py-4 px-5 rounded-2xl bg-[#FFCC00] hover:bg-[#f5c400] active:scale-[0.99] text-gray-950 font-bold text-base transition-all shadow-xs flex items-center justify-center cursor-pointer touch-manipulation disabled:cursor-not-allowed disabled:opacity-60"
+                        className="w-full sm:flex-1 py-4 px-5 rounded-2xl bg-[#FFCC00] hover:bg-[#f5c400] active:scale-[0.99] text-gray-950 font-bold text-base transition-all shadow-xs flex items-center justify-center cursor-pointer touch-manipulation"
                       >
                         <span>No Go Back</span>
                       </button>
@@ -4814,11 +4245,10 @@ export default function SendPackageFlow({
                       {/* Bottom Red Outlined Button: Yes Continue */}
                       <button
                         type="button"
-                        disabled={isCancelling}
                         onClick={handleCancelDelivery}
-                        className="w-full sm:flex-1 py-4 px-5 rounded-2xl border border-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 text-[#ea3829] font-bold text-base transition-all flex items-center justify-center cursor-pointer touch-manipulation disabled:cursor-not-allowed disabled:opacity-60"
+                        className="w-full sm:flex-1 py-4 px-5 rounded-2xl border border-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 text-[#ea3829] font-bold text-base transition-all flex items-center justify-center cursor-pointer touch-manipulation"
                       >
-                        <span>{isCancelling ? "Cancelling..." : "Yes Continue"}</span>
+                        <span>Yes Continue</span>
                       </button>
                     </div>
                   </div>
@@ -4945,7 +4375,7 @@ export default function SendPackageFlow({
               )}
 
               {/* Drop-off Confirmation Code Modal (Matches User's Screenshot Exactly) */}
-              {showDropOffCodeModal && !isTransactionComplete && (
+              {showDropOffCodeModal && (
                 <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
                   <div
                     onClick={(e) => e.stopPropagation()}
@@ -4982,12 +4412,12 @@ export default function SendPackageFlow({
                         Drop-off Confirmation code for the rider
                       </p>
 
-                      {/* Handover code digits + copy button */}
-                      <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+                      {/* 4 Digit Boxes + Yellow Copy Button */}
+                      <div className="flex items-center justify-center gap-2 sm:gap-2.5">
                         {dropOffCode.split("").map((digit, idx) => (
                           <div
                             key={idx}
-                            className="w-9 h-11 sm:w-12 sm:h-14 rounded-xl sm:rounded-2xl bg-[#2e3036] flex items-center justify-center text-2xl sm:text-3xl font-bold text-white shadow-inner select-all"
+                            className="w-12 h-14 sm:w-14 sm:h-16 rounded-2xl bg-[#2e3036] flex items-center justify-center text-3xl sm:text-4xl font-bold text-white shadow-inner select-all"
                           >
                             {digit}
                           </div>
@@ -5046,17 +4476,17 @@ export default function SendPackageFlow({
                       </div>
                     </div>
 
-                    {/* Help and close actions */}
+                    {/* Action Buttons: Confirm Release or Close */}
                     <div className="pt-2 flex flex-col gap-2">
                       <button
                         type="button"
                         onClick={() => {
                           setShowDropOffCodeModal(false)
-                          setShowReportModal(true)
+                          handlePackageReceived()
                         }}
                         className="w-full py-4 px-5 rounded-2xl bg-[#FFCC00] hover:bg-[#f5c400] active:scale-[0.99] text-gray-950 font-bold text-base transition-all shadow-xs flex items-center justify-center cursor-pointer touch-manipulation"
                       >
-                        <span>Need help?</span>
+                        <span>Confirm & Release Payment</span>
                       </button>
                       <button
                         type="button"
@@ -5081,17 +4511,17 @@ export default function SendPackageFlow({
           const chosenRider = getSelectedRider()
 
           return (
-            <div className="w-full flex-1 min-h-[100dvh] overflow-y-auto bg-white dark:bg-[#0c0c0e] rounded-none m-0 shadow-none relative select-none">
+            <div className="w-full flex-1 h-full min-h-full overflow-y-auto bg-white dark:bg-[#0c0c0e] rounded-none m-0 shadow-none relative select-none">
               {/* Celebration Confetti in upper half (Hardcoded Static SVG, Not Animated) */}
               <div className="absolute inset-x-0 top-0 h-64 sm:h-72 pointer-events-none overflow-hidden z-0 flex items-start justify-center">
                 <ConfettiBackground className="w-full max-w-2xl h-full opacity-90" />
               </div>
 
-              <div className="w-full min-h-[100dvh] flex flex-col justify-between px-[22px] sm:px-10 pt-[max(9rem,calc(env(safe-area-inset-top)+9rem))] pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pt-8 sm:pb-10 relative z-10 animate-in fade-in duration-300">
+              <div className="w-full min-h-full flex flex-col justify-between px-4 sm:px-10 pt-5 sm:pt-8 pb-20 sm:pb-28 relative z-10 animate-in fade-in duration-300">
                 {/* Top Center: Scalloped Green Badge, Pill, Title & Subtitle */}
-                <div className="flex flex-col items-center text-center shrink-0">
+                <div className="flex flex-col items-center text-center pt-4 sm:pt-8 shrink-0">
                   {/* Large Green Scalloped Badge with Checkmark (User's Exact Asset) */}
-                  <div className="relative w-32 h-32 sm:w-32 sm:h-32 drop-shadow-[0_12px_24px_rgba(34,197,94,0.3)] animate-in zoom-in-75 duration-300 flex items-center justify-center">
+                  <div className="relative w-28 h-28 sm:w-32 sm:h-32 drop-shadow-[0_12px_24px_rgba(34,197,94,0.3)] animate-in zoom-in-75 duration-300 flex items-center justify-center">
                     <img
                       src={greenSuccessBadge}
                       alt="Delivery Successful"
@@ -5100,14 +4530,14 @@ export default function SendPackageFlow({
                   </div>
 
                   {/* Payment Released Successful Pill */}
-                  <div className="mt-6 px-2.5 py-1 rounded-full bg-[#DCFCE7] dark:bg-[#143320]">
+                  <div className="mt-6 px-4 py-1.5 rounded-full bg-[#DCFCE7] dark:bg-[#143320] border border-[#86efac]/40 shadow-2xs">
                     <span className="text-[#15803D] dark:text-[#4ade80] text-[11px] sm:text-xs font-bold tracking-wider uppercase">
                       PAYMENT RELEASED SUCCESSFUL
                     </span>
                   </div>
 
                   {/* Congratulation */}
-                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 dark:text-white mt-6 tracking-tight">
+                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 dark:text-white mt-4 tracking-tight">
                     Congratulation
                   </h2>
 
@@ -5120,17 +4550,17 @@ export default function SendPackageFlow({
                 </div>
 
                 {/* Middle: Total Amount Row */}
-                <div className="w-full max-w-xl mx-auto flex items-center justify-between py-2 my-6 shrink-0">
+                <div className="w-full max-w-xl mx-auto flex items-center justify-between py-6 my-6 border-t border-b border-gray-100 dark:border-white/5 shrink-0">
                   <span className="text-base font-semibold text-gray-700 dark:text-gray-300">
                     Total Amount
                   </span>
                   <span className="text-2xl sm:text-3xl font-extrabold text-gray-950 dark:text-white tracking-tight">
-                    {estimatedFee ? `₦${estimatedFee}` : "Quote unavailable"}
+                    ₦{estimatedFee || "1,500"}
                   </span>
                 </div>
 
                 {/* Bottom Actions: Rating Card & Go Back Home Button */}
-                <div className="w-full max-w-xl mx-auto space-y-8 shrink-0">
+                <div className="w-full max-w-xl mx-auto space-y-4 shrink-0">
                   {/* Courier Experience Card */}
                   <div className="w-full bg-[#18191d] dark:bg-[#1c1d22] text-white p-4 sm:p-4.5 rounded-2xl flex items-center gap-3.5 sm:gap-4 shadow-md">
                     {/* Courier with yellow helmet & vest */}
@@ -5159,7 +4589,7 @@ export default function SendPackageFlow({
                   <button
                     type="button"
                     onClick={handleFinishSuccess}
-                    className="w-full h-[58px] px-6 rounded-2xl bg-[#FFCC00] hover:bg-[#f5c400] active:scale-[0.99] text-gray-950 font-bold text-base transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer touch-manipulation"
+                    className="w-full py-4 px-6 rounded-2xl bg-[#FFCC00] hover:bg-[#f5c400] active:scale-[0.99] text-gray-950 font-bold text-base transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer touch-manipulation"
                   >
                     <span>Go back home</span>
                     <span className="text-lg leading-none font-bold">→</span>
@@ -5233,7 +4663,7 @@ export default function SendPackageFlow({
           >
             <div className="relative max-h-full max-w-full flex items-center justify-center">
               <img
-                src={packagePhoto}
+                src={capturedImage?.previewUrl || defaultPixelPhoto}
                 alt={packageName || "Delivery Package"}
                 className="max-h-[75vh] sm:max-h-[82vh] max-w-[94vw] w-auto h-auto object-contain rounded-2xl shadow-2xl ring-1 ring-white/15 animate-in zoom-in-95 duration-200 select-none"
               />

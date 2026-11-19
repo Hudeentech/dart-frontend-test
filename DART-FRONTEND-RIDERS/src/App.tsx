@@ -6,7 +6,6 @@ import { RiderProvider } from "./context/RiderContext"
 import { useHashRoute } from "./hooks/router"
 import { AppShell } from "./components/AppShell"
 import { AuthLayout } from "./components/AuthLayout"
-import { PageLoader } from "./components/ui"
 
 // App pages
 import { AuthPage } from "./pages/AuthPage"
@@ -33,14 +32,7 @@ function AppContent() {
     }
   }, [segments, path])
 
-  // 1. Initial launching / token check
-  if (isBootstrapping) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-ink-950">
-        <PageLoader />
-      </div>
-    )
-  }
+  // Session bootstrap does not block the normal app flow.
 
   // 2. Unauthenticated -> Show Rider Login / Signup
   if (!isAuthenticated) {

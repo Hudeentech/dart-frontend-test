@@ -13,69 +13,10 @@ import {
   Trash2,
   Bell,
   CheckCheck,
-  CheckCircle2,
-  Truck,
-  Star,
-  ShieldCheck,
-  AlertCircle,
-  Sparkles,
 } from "lucide-react"
 import type { AppNotification } from "../types/api.types"
-import CustomDeleteModal from "../components/CustomDeleteModal"
-import SwipeToDeleteItem from "../components/SwipeToDeleteItem"
 
 type Tab = "All" | "Delivery" | "System"
-
-function getNotificationVisual(item: { type?: string; title?: string; message?: string }) {
-  const text = `${item.type || ""} ${item.title || ""} ${item.message || ""}`.toLowerCase()
-
-  if (text.includes("alert") || text.includes("cancel") || text.includes("fail") || text.includes("dispute")) {
-    return {
-      icon: <AlertCircle className="size-4" />,
-      bg: "bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400",
-    }
-  }
-  if (text.includes("wallet") || text.includes("payment") || text.includes("payout") || text.includes("fund") || text.includes("deposit")) {
-    return {
-      icon: <Wallet className="size-4" />,
-      bg: "bg-yellow-400 text-black shadow-xs",
-    }
-  }
-  if (text.includes("delivered") || text.includes("completed") || text.includes("settled") || text.includes("confirmed")) {
-    return {
-      icon: <CheckCircle2 className="size-4" />,
-      bg: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400",
-    }
-  }
-  if (text.includes("transit") || text.includes("on the way") || text.includes("picked up") || text.includes("en route") || text.includes("dispatch")) {
-    return {
-      icon: <Truck className="size-4" />,
-      bg: "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400",
-    }
-  }
-  if (text.includes("rating") || text.includes("review") || text.includes("star") || text.includes("feedback")) {
-    return {
-      icon: <Star className="size-4 fill-amber-400 text-amber-500" />,
-      bg: "bg-amber-100 dark:bg-amber-400/20 text-amber-700 dark:text-amber-300",
-    }
-  }
-  if (text.includes("verif") || text.includes("identity") || text.includes("nin") || text.includes("security") || text.includes("kyc")) {
-    return {
-      icon: <ShieldCheck className="size-4" />,
-      bg: "bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300",
-    }
-  }
-  if (text.includes("package") || text.includes("order") || text.includes("delivery") || text.includes("request")) {
-    return {
-      icon: <Package className="size-4" />,
-      bg: "bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400",
-    }
-  }
-  return {
-    icon: <Sparkles className="size-4" />,
-    bg: "bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300",
-  }
-}
 
 export function NotificationsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { reloadUnread } = useRider()
@@ -84,19 +25,7 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
   const [activeTab, setActiveTab] = useState<Tab>("All")
   const [filterUnreadOnly, setFilterUnreadOnly] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
-  const [deletePrompt, setDeletePrompt] = useState<{
-    isOpen: boolean
-    title: string
-    message: string
-    itemCount?: number
-    confirmText?: string
-    onConfirm: () => Promise<void> | void
-  }>({
-    isOpen: false,
-    title: "",
-    message: "",
-    onConfirm: () => {},
-  })
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -141,48 +70,29 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
     }
   }
 
-  const promptDeleteSingle = (id: string, title?: string) => {
-    setDeletePrompt({
-      isOpen: true,
-      title: "Delete notification?",
-      message: `Are you sure you want to delete "${title || "this notification"}"?`,
-      itemCount: 1,
-      confirmText: "Delete",
-      onConfirm: async () => {
-        setDeletePrompt((prev) => ({ ...prev, isOpen: false }))
-        setNotifications((prev) => prev.filter((n) => n.id !== id))
-        try {
-          await notificationsApi.remove(id)
-          await reloadUnread()
-          toast("Notification deleted", "info")
-        } catch {
-          // Ignore
-        }
-      },
-    })
+  const handleDeleteSingle = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    setNotifications((prev) => prev.filter((n) => n.id !== id))
+    try {
+      await notificationsApi.remove(id)
+      await reloadUnread()
+      toast("Notification deleted", "info")
+    } catch {
+      // Ignore
+    }
   }
 
-  const promptClearAll = () => {
+  const handleClear = async () => {
+    setNotifications([])
+    setShowClearConfirm(false)
     setShowMenu(false)
-    if (notifications.length === 0) return
-    setDeletePrompt({
-      isOpen: true,
-      title: "Clear all notifications?",
-      message: "Are you sure you want to remove all notifications from your rider notification list?",
-      itemCount: notifications.length,
-      confirmText: "Clear All",
-      onConfirm: async () => {
-        setDeletePrompt((prev) => ({ ...prev, isOpen: false }))
-        setNotifications([])
-        try {
-          await notificationsApi.clear()
-          await reloadUnread()
-          toast("All notifications cleared", "info")
-        } catch {
-          // Ignore
-        }
-      },
-    })
+    try {
+      await notificationsApi.clear()
+      await reloadUnread()
+      toast("All notifications cleared", "info")
+    } catch {
+      // Ignore
+    }
   }
 
   const filteredNotifications = notifications.filter((item) => {
@@ -230,8 +140,9 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
               <ArrowLeft className="size-5" />
             </button>
           )}
+          {embedded && <Bell className="size-5 text-yellow-500 shrink-0" />}
           <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-            Notifications
+            {embedded ? "Notifications" : "Notifications"}
           </h1>
           {unreadCount > 0 && (
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-yellow-400 text-black">
@@ -281,7 +192,10 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
               </button>
               <div className="h-px bg-gray-100 dark:bg-white/10 my-1" />
               <button
-                onClick={promptClearAll}
+                onClick={() => {
+                  setShowClearConfirm(true)
+                  setShowMenu(false)
+                }}
                 className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 cursor-pointer"
               >
                 <Trash2 className="size-4" />
@@ -344,56 +258,51 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
 
                 <div className="space-y-2.5">
                   {todayItems.map((item) => {
-                    const visual = getNotificationVisual(item)
+                    const isWallet = (item.type || "").toUpperCase().includes("WALLET") || (item.type || "").toUpperCase().includes("PAYMENT")
                     return (
-                      <SwipeToDeleteItem
+                      <div
                         key={item.id}
-                        onDelete={() => promptDeleteSingle(item.id, item.title)}
-                        deleteLabel="Delete"
-                        bgClass={!item.isRead ? "bg-[#fffbeb] dark:bg-[#252219]" : "bg-white dark:bg-[#1c1c20]"}
+                        onClick={() => !item.isRead && handleMarkAsRead(item.id)}
+                        className={`group relative flex gap-3 p-3.5 rounded-2xl transition-all border cursor-pointer ${
+                          !item.isRead
+                            ? "bg-yellow-50/70 dark:bg-yellow-400/10 border-yellow-200/50 dark:border-yellow-400/20 shadow-2xs"
+                            : "bg-gray-50/60 dark:bg-white/5 border-transparent hover:border-gray-200 dark:hover:border-white/10"
+                        }`}
                       >
                         <div
-                          onClick={() => !item.isRead && handleMarkAsRead(item.id)}
-                          className={`group relative flex gap-3 p-3.5 rounded-2xl transition-all border cursor-pointer ${
-                            !item.isRead
-                              ? "bg-[#fffbeb] dark:bg-[#252219] border-yellow-300 dark:border-yellow-500/30 shadow-2xs"
-                              : "bg-white dark:bg-[#1c1c20] border-gray-100 dark:border-white/10 hover:border-gray-200 dark:hover:border-white/20"
+                          className={`size-9 rounded-xl flex items-center justify-center shrink-0 ${
+                            isWallet
+                              ? "bg-yellow-400 text-black font-bold"
+                              : "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
                           }`}
                         >
-                          <div
-                            className={`size-9 rounded-xl flex items-center justify-center shrink-0 ${visual.bg}`}
-                          >
-                            {visual.icon}
-                          </div>
-                          <div className="flex-1 min-w-0 pr-8">
-                            <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
-                              {item.title}
-                            </p>
-                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
-                              {item.message}
-                            </p>
-                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                              {formatTime(item.createdAt)}
-                            </p>
-                          </div>
-                          
-                          <div className="flex items-center gap-1.5 shrink-0 self-start">
-                            {!item.isRead && (
-                              <div className="size-2 bg-yellow-500 rounded-full mt-1.5 shrink-0 animate-pulse" title="Unread" />
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                promptDeleteSingle(item.id, item.title)
-                              }}
-                              title="Delete notification"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-white/10"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          </div>
+                          {isWallet ? <Wallet className="size-4" /> : <Package className="size-4" />}
                         </div>
-                      </SwipeToDeleteItem>
+                        <div className="flex-1 min-w-0 pr-8">
+                          <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
+                            {item.title}
+                          </p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
+                            {item.message}
+                          </p>
+                          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                            {formatTime(item.createdAt)}
+                          </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-1.5 shrink-0 self-start">
+                          {!item.isRead && (
+                            <div className="size-2 bg-yellow-500 rounded-full mt-1.5 shrink-0 animate-pulse" title="Unread" />
+                          )}
+                          <button
+                            onClick={(e) => handleDeleteSingle(e, item.id)}
+                            title="Delete notification"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
+                      </div>
                     )
                   })}
                 </div>
@@ -409,56 +318,51 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
 
                 <div className="space-y-2.5">
                   {earlierItems.map((item) => {
-                    const visual = getNotificationVisual(item)
+                    const isWallet = (item.type || "").toUpperCase().includes("WALLET") || (item.type || "").toUpperCase().includes("PAYMENT")
                     return (
-                      <SwipeToDeleteItem
+                      <div
                         key={item.id}
-                        onDelete={() => promptDeleteSingle(item.id, item.title)}
-                        deleteLabel="Delete"
-                        bgClass={!item.isRead ? "bg-[#fffbeb] dark:bg-[#252219]" : "bg-white dark:bg-[#1c1c20]"}
+                        onClick={() => !item.isRead && handleMarkAsRead(item.id)}
+                        className={`group relative flex gap-3 p-3.5 rounded-2xl transition-all border cursor-pointer ${
+                          !item.isRead
+                            ? "bg-yellow-50/70 dark:bg-yellow-400/10 border-yellow-200/50 dark:border-yellow-400/20 shadow-2xs"
+                            : "bg-gray-50/60 dark:bg-white/5 border-transparent hover:border-gray-200 dark:hover:border-white/10"
+                        }`}
                       >
                         <div
-                          onClick={() => !item.isRead && handleMarkAsRead(item.id)}
-                          className={`group relative flex gap-3 p-3.5 rounded-2xl transition-all border cursor-pointer ${
-                            !item.isRead
-                              ? "bg-[#fffbeb] dark:bg-[#252219] border-yellow-300 dark:border-yellow-500/30 shadow-2xs"
-                              : "bg-white dark:bg-[#1c1c20] border-gray-100 dark:border-white/10 hover:border-gray-200 dark:hover:border-white/20"
+                          className={`size-9 rounded-xl flex items-center justify-center shrink-0 ${
+                            isWallet
+                              ? "bg-yellow-400 text-black font-bold"
+                              : "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
                           }`}
                         >
-                          <div
-                            className={`size-9 rounded-xl flex items-center justify-center shrink-0 ${visual.bg}`}
-                          >
-                            {visual.icon}
-                          </div>
-                          <div className="flex-1 min-w-0 pr-8">
-                            <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
-                              {item.title}
-                            </p>
-                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
-                              {item.message}
-                            </p>
-                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                              {formatTime(item.createdAt)}
-                            </p>
-                          </div>
-                          
-                          <div className="flex items-center gap-1.5 shrink-0 self-start">
-                            {!item.isRead && (
-                              <div className="size-2 bg-yellow-500 rounded-full mt-1.5 shrink-0 animate-pulse" title="Unread" />
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                promptDeleteSingle(item.id, item.title)
-                              }}
-                              title="Delete notification"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-white/10"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          </div>
+                          {isWallet ? <Wallet className="size-4" /> : <Package className="size-4" />}
                         </div>
-                      </SwipeToDeleteItem>
+                        <div className="flex-1 min-w-0 pr-8">
+                          <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
+                            {item.title}
+                          </p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
+                            {item.message}
+                          </p>
+                          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                            {formatTime(item.createdAt)}
+                          </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-1.5 shrink-0 self-start">
+                          {!item.isRead && (
+                            <div className="size-2 bg-yellow-500 rounded-full mt-1.5 shrink-0 animate-pulse" title="Unread" />
+                          )}
+                          <button
+                            onClick={(e) => handleDeleteSingle(e, item.id)}
+                            title="Delete notification"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
+                      </div>
                     )
                   })}
                 </div>
@@ -468,16 +372,41 @@ export function NotificationsPage({ embedded = false }: { embedded?: boolean } =
         )}
       </div>
 
-      {/* Custom Delete Confirmation Modal */}
-      <CustomDeleteModal
-        isOpen={deletePrompt.isOpen}
-        title={deletePrompt.title}
-        message={deletePrompt.message}
-        itemCount={deletePrompt.itemCount}
-        confirmText={deletePrompt.confirmText}
-        onCancel={() => setDeletePrompt((prev) => ({ ...prev, isOpen: false }))}
-        onConfirm={deletePrompt.onConfirm}
-      />
+      {/* Clear Confirmation Modal Overlay */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center p-4">
+          <div className="bg-white dark:bg-[#202024] w-full max-w-sm rounded-2xl p-5 shadow-2xl border border-gray-100 dark:border-white/10">
+            <div className="flex justify-between items-start mb-2">
+              <h2 className="text-base font-bold text-gray-900 dark:text-white">
+                Clear notifications?
+              </h2>
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="size-7 flex items-center justify-center bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 rounded-full text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-gray-500 dark:text-gray-400 mb-5 text-xs leading-relaxed">
+              We'll remove all notifications from your rider notification list.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-white/15 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClear}
+                className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

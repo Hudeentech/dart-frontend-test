@@ -9,6 +9,7 @@ import {
   Camera,
   Mic,
   Send,
+  Trash2,
   Play,
   Pause,
   CheckCheck,
@@ -35,7 +36,6 @@ import {
 import { chatApi, getChatSocket } from "../api/chat.api"
 import { useAuth } from "../context/AuthContext"
 import { useRider } from "../context/RiderContext"
-import { navigate } from "../hooks/router"
 import { STATUS_BUCKET, canAccept, fullName, timeAgo } from "../utils/format"
 import type { ChatContact } from "../types/api.types"
 
@@ -43,7 +43,6 @@ type Tab = "All" | "Conversation" | "Updates" | "Supports"
 
 interface ChatMessage {
   id: string
-  clientMessageId?: string
   sender: "user" | "other"
   senderRole?: "user" | "other" | "rider" | "customer"
   senderId?: string
@@ -61,51 +60,34 @@ interface ChatMessage {
   isEdited?: boolean
 }
 
-const createClientMessageId = () =>
-  globalThis.crypto?.randomUUID?.() ||
-  `message-${Date.now()}-${Math.random().toString(36).slice(2)}`
-
-function upsertMessage(
-  messages: ChatMessage[],
-  incoming: ChatMessage,
-): ChatMessage[] {
-  const index = messages.findIndex(
-    (message) =>
-      message.id === incoming.id ||
-      (!!incoming.clientMessageId &&
-        message.clientMessageId === incoming.clientMessageId),
-  )
-  const updated =
-    index < 0
-      ? [...messages, incoming]
-      : messages.map((message, messageIndex) =>
-          messageIndex === index ? { ...message, ...incoming } : message,
-        )
-  const seenIds = new Set<string>()
-  return updated.filter((message) => {
-    if (seenIds.has(message.id)) return false
-    seenIds.add(message.id)
-    return true
-  })
-}
-
 function reconcileSentMessage(
   messages: ChatMessage[],
   temporaryId: string,
   saved: ChatMessage,
 ): ChatMessage[] {
   const temporary = messages.find((message) => message.id === temporaryId)
-  return upsertMessage(
-    messages,
-    {
-      ...temporary,
-      ...saved,
-      clientMessageId: temporary?.clientMessageId,
-      sender: "user",
-      time: saved.time || temporary?.time || "Just now",
-    },
-  )
+  const socketMessage = messages.find((message) => message.id === saved.id)
+  const reconciled = {
+    ...temporary,
+    ...socketMessage,
+    ...saved,
+    sender: "user" as const,
+    time: saved.time || socketMessage?.time || temporary?.time || "Just now",
+  }
+
+  return [
+    ...messages.filter(
+      (message) => message.id !== temporaryId && message.id !== saved.id,
+    ),
+    reconciled,
+  ]
 }
+
+// Fixed soundwave bar heights for WhatsApp-style audio rendering
+const WAVEFORM_BAR_HEIGHTS = [
+  6, 12, 18, 10, 16, 22, 14, 26, 18, 10, 20, 14, 8, 16, 24, 18, 12, 20, 15, 8,
+  14, 22, 16, 10, 6, 12,
+]
 
 // Emojis matching user's design reference
 const REACTION_EMOJIS = ["👍", "🙂", "😊", "😒", "💖", "😄", "🙃", "👌"]
@@ -144,24 +126,13 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
   const [activeTab, setActiveTab] = useState<Tab>("All")
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
   const [searchQuery, setSearchQuery] = useState<string>("")
-  const [activeChat, setActiveChat] = useState<string | null>(initialChatId || null)
+  const [activeChat, setActiveChat] = useState<string | null>(null)
   const [contacts, setContacts] = useState<ChatContact[]>([])
   const [messagesByChat, setMessagesByChat] = useState<Record<string, ChatMessage[]>>({})
   const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (initialChatId) {
-      setActiveChat(initialChatId)
-    }
-  }, [initialChatId])
-
   // Real active or incoming delivery order (in transit, picked up, rider assigned/accepted, etc.)
-  const activeOrder = orders.find(
-    (o) =>
-      (activeChat && (`order-${o.id}` === activeChat || o.id === activeChat)) ||
-      STATUS_BUCKET[o.status] === "active" ||
-      canAccept(o.status),
-  )
+  const activeOrder = orders.find((o) => STATUS_BUCKET[o.status] === "active" || canAccept(o.status))
 
   // Synthesize contacts list: combine active order's customer with any chats from API
   const allContacts: ChatContact[] = []
@@ -172,16 +143,7 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
 
   if (activeOrder) {
     const activeOrderChatId = `order-${activeOrder.id}`
-    if (
-      !allContacts.some(
-        (contact) =>
-          contact.id === activeOrderChatId ||
-          Boolean(
-            activeOrder.customer?.id &&
-              contact.contactId === activeOrder.customer.id,
-          ),
-      )
-    ) {
+    if (!allContacts.some((contact) => contact.id === activeOrderChatId)) {
       const cName = fullName(activeOrder.customer, "Customer")
       allContacts.unshift({
         id: activeOrderChatId,
@@ -219,6 +181,10 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
     }
     return true
   })
+
+  useEffect(() => {
+    if (initialChatId) setActiveChat(initialChatId)
+  }, [initialChatId])
 
   useEffect(() => {
     onChatOpenChange?.(activeChat !== null)
@@ -305,7 +271,6 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
         (m.sender === "user" && m.senderRole !== "customer")
       return {
         id: m.id,
-        clientMessageId: m.clientMessageId,
         sender: isMine ? "user" : "other",
         senderRole: m.senderRole,
         senderId: m.senderId,
@@ -344,11 +309,7 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
         if (msgs && Array.isArray(msgs)) {
           setMessagesByChat((prev) => ({
             ...prev,
-            [activeChat]: msgs.reduce(
-              (messages: ChatMessage[], message: any) =>
-                upsertMessage(messages, formatIncoming(message)),
-              prev[activeChat] || [],
-            ),
+            [activeChat]: msgs.map(formatIncoming),
           }))
           setTimeout(scrollToBottom, 50)
         }
@@ -375,9 +336,10 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
         if (matches) {
           setMessagesByChat((prev) => {
             const existing = prev[activeChat] || []
+            if (existing.some((m) => m.id === msg.id)) return prev
             return {
               ...prev,
-              [activeChat]: upsertMessage(existing, formatIncoming(msg)),
+              [activeChat]: [...existing, formatIncoming(msg)],
             }
           })
           setTimeout(scrollToBottom, 50)
@@ -466,10 +428,9 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
     const reader = new FileReader()
     reader.onload = () => {
       const dataUrl = reader.result as string
-      const tempId = createClientMessageId()
+      const tempId = `img-${Date.now()}`
       const newMsg: ChatMessage = {
         id: tempId,
-        clientMessageId: tempId,
         sender: "user",
         type: "image",
         imageUrl: dataUrl,
@@ -487,7 +448,6 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
       chatApi
         .sendMessage(activeChat, {
           type: "image",
-          clientMessageId: tempId,
           imageUrl: dataUrl,
           text: file.name,
         })
@@ -501,13 +461,11 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
             ),
           }))
         })
-        .catch((error) => {
+        .catch(() => {
           setMessagesByChat((prev) => ({
             ...prev,
             [activeChat]: (prev[activeChat] || []).filter((m) => m.id !== tempId),
           }))
-          console.warn("Failed to send image message:", error)
-          showToast("Photo could not be sent. Please try again.")
         })
     }
     reader.readAsDataURL(file)
@@ -527,10 +485,9 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
     const reader = new FileReader()
     reader.onload = () => {
       const dataUrl = reader.result as string
-      const tempId = createClientMessageId()
+      const tempId = `file-${Date.now()}`
       const newMsg: ChatMessage = {
         id: tempId,
-        clientMessageId: tempId,
         sender: "user",
         type: "file",
         fileName: file.name,
@@ -549,7 +506,6 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
       chatApi
         .sendMessage(activeChat, {
           type: "file",
-          clientMessageId: tempId,
           fileName: file.name,
           fileSize: file.size,
           fileUrl: dataUrl,
@@ -564,13 +520,11 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
             ),
           }))
         })
-        .catch((error) => {
+        .catch(() => {
           setMessagesByChat((prev) => ({
             ...prev,
             [activeChat]: (prev[activeChat] || []).filter((m) => m.id !== tempId),
           }))
-          console.warn("Failed to send file message:", error)
-          showToast("File could not be sent. Please try again.")
         })
     }
     reader.readAsDataURL(file)
@@ -600,10 +554,9 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
     const textToSend = inputText.trim()
     if (!textToSend) return
 
-    const tempId = createClientMessageId()
+    const tempId = `msg-${Date.now()}`
     const newMessage: ChatMessage = {
       id: tempId,
-      clientMessageId: tempId,
       sender: "user",
       type: "text",
       text: textToSend,
@@ -619,11 +572,7 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
     setTimeout(scrollToBottom, 50)
 
     chatApi
-      .sendMessage(activeChat, {
-        type: "text",
-        text: textToSend,
-        clientMessageId: tempId,
-      })
+      .sendMessage(activeChat, { type: "text", text: textToSend })
       .then((saved: any) => {
         setMessagesByChat((prev) => ({
           ...prev,
@@ -634,23 +583,20 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
           ),
         }))
       })
-      .catch((error) => {
+      .catch(() => {
         setMessagesByChat((prev) => ({
           ...prev,
           [activeChat]: (prev[activeChat] || []).filter((m) => m.id !== tempId),
         }))
-        console.warn("Failed to send message:", error)
-        showToast("Message could not be sent. Please try again.")
       })
   }
 
   // Quick suggestion click
   const handleQuickSuggestion = (text: string) => {
     if (!activeChat) return
-    const tempId = createClientMessageId()
+    const tempId = `msg-${Date.now()}`
     const newMessage: ChatMessage = {
       id: tempId,
-      clientMessageId: tempId,
       sender: "user",
       type: "text",
       text,
@@ -665,11 +611,7 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
     setTimeout(scrollToBottom, 50)
 
     chatApi
-      .sendMessage(activeChat, {
-        type: "text",
-        text,
-        clientMessageId: tempId,
-      })
+      .sendMessage(activeChat, { type: "text", text })
       .then((saved: any) => {
         setMessagesByChat((prev) => ({
           ...prev,
@@ -680,13 +622,11 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
           ),
         }))
       })
-      .catch((error) => {
+      .catch(() => {
         setMessagesByChat((prev) => ({
           ...prev,
           [activeChat]: (prev[activeChat] || []).filter((m) => m.id !== tempId),
         }))
-        console.warn("Failed to send suggested message:", error)
-        showToast("Message could not be sent. Please try again.")
       })
   }
 
@@ -773,10 +713,9 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
     }
 
     const finalizeAndSend = (audioUrl: string) => {
-      const tempId = createClientMessageId()
+      const tempId = `vn-${Date.now()}`
       const newVoiceMessage: ChatMessage = {
         id: tempId,
-        clientMessageId: tempId,
         sender: "user",
         type: "audio",
         audioUrl,
@@ -797,7 +736,6 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
       chatApi
         .sendMessage(activeChat, {
           type: "audio",
-          clientMessageId: tempId,
           audioUrl,
           audioDuration: duration,
         })
@@ -811,13 +749,11 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
             ),
           }))
         })
-        .catch((error) => {
+        .catch(() => {
           setMessagesByChat((prev) => ({
             ...prev,
             [activeChat]: (prev[activeChat] || []).filter((m) => m.id !== tempId),
           }))
-          console.warn("Failed to send voice note:", error)
-          showToast("Voice note could not be sent. Please try again.")
         })
     }
 
@@ -834,17 +770,8 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
           const blob = new Blob(audioChunksRef.current, { type: mimeType })
           const reader = new FileReader()
           reader.onloadend = () => {
-            if (typeof reader.result === "string") {
-              finalizeAndSend(reader.result)
-            } else {
-              showToast("Voice note could not be prepared. Please try again.")
-              setIsRecording(false)
-            }
-          }
-          reader.onerror = () => {
-            console.error("Failed to read recorded voice note:", reader.error)
-            showToast("Voice note could not be prepared. Please try again.")
-            setIsRecording(false)
+            const audioUrl = (reader.result as string) || URL.createObjectURL(blob)
+            finalizeAndSend(audioUrl)
           }
           reader.readAsDataURL(blob)
         } else {
@@ -971,6 +898,23 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
     setInputText("")
   }
 
+  // Delete message
+  const handleDeleteMessage = () => {
+    if (!selectedMessageForMenu || !activeChat) return
+
+    chatApi.deleteMessage(activeChat, selectedMessageForMenu.id).catch(() => {})
+
+    setMessagesByChat((prev) => ({
+      ...prev,
+      [activeChat]: (prev[activeChat] || []).filter(
+        (msg) => msg.id !== selectedMessageForMenu.id,
+      ),
+    }))
+
+    handleCloseContextMenu()
+    showToast("Message deleted")
+  }
+
   // Long press touch handlers
   const handleTouchStart = (msg: ChatMessage) => {
     longPressTimerRef.current = window.setTimeout(() => {
@@ -986,31 +930,7 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
   }
 
   const currentContact = activeChat
-    ? allContacts.find((c) => c.id === activeChat) ||
-      (() => {
-        const orderId = activeChat.replace("order-", "")
-        const matched = orders.find((o) => o.id === orderId)
-        if (matched) {
-          const cName = fullName(matched.customer, "Customer")
-          return {
-            id: activeChat,
-            contactId: matched.customer?.id || matched.id,
-            name: cName,
-            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(cName)}&background=ffcc00&color=000000`,
-            role: "Customer" as const,
-            rating: "5.0",
-            online: true,
-            package: {
-              title: matched.package?.name || "Active Delivery Package",
-              trackingId: matched.trackingId || matched.orderNumber || "TRK-ACTIVE",
-              icon: "📦",
-            },
-            lastMessage: "Delivery in progress",
-            unreadCount: 0,
-          }
-        }
-        return null
-      })()
+    ? allContacts.find((c) => c.id === activeChat) || null
     : null
   const currentMessages = activeChat ? messagesByChat[activeChat] || [] : []
   const pinnedMessage = currentMessages.find((m) => m.isPinned)
@@ -1018,8 +938,8 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
   // Active Chat Screen
   if (activeChat && currentContact) {
     return (
-      <div className="flex-1 min-h-0 flex flex-col bg-[#fcfcfc] dark:bg-[#0c0c0e] h-full overflow-hidden transition-colors relative">
-        <div className="w-full max-w-4xl 2xl:max-w-5xl mx-auto flex flex-col h-full min-h-0 bg-transparent border-0 md:border-x border-gray-200/70 dark:border-white/5 overflow-hidden transition-colors relative">
+      <div className="flex-1 flex flex-col bg-[#fcfcfc] dark:bg-[#0c0c0e] h-full overflow-y-auto transition-colors relative">
+        <div className="w-full max-w-4xl 2xl:max-w-5xl mx-auto flex flex-col min-h-full bg-transparent border-0 md:border-x border-gray-200/70 dark:border-white/5 overflow-hidden transition-colors relative">
           {/* Toast Notification */}
           {toastMessage && (
             <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-gray-900/90 text-white text-xs font-medium px-4 py-2 rounded-full shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200 flex items-center gap-2">
@@ -1028,17 +948,14 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
             </div>
           )}
 
-          {/* Chat Header - Fixed / Non-scrolling at top */}
-          <div className="shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-3 flex items-center justify-between border-b border-gray-100 dark:border-white/5 bg-white dark:bg-[#161618] z-20">
+          {/* Chat Header */}
+          <div className="px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-3 flex items-center justify-between border-b border-gray-100 dark:border-white/5 sticky top-0 bg-white dark:bg-[#161618] z-10">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => {
                   cancelVoiceRecording()
                   setActiveChat(null)
                   setSelectedMessageForMenu(null)
-                  if (initialChatId) {
-                    navigate("/messages", { replace: true })
-                  }
                 }}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-white/5 text-gray-800 dark:text-white transition-colors cursor-pointer"
                 title="Back to conversations"
@@ -1084,9 +1001,9 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
             </div>
           </div>
 
-          {/* Pinned Message Bar (if any pinned) - Fixed under header */}
+          {/* Pinned Message Bar (if any pinned) */}
           {pinnedMessage && (
-            <div className="shrink-0 bg-amber-50/90 dark:bg-amber-950/30 border-b border-amber-200/60 dark:border-amber-500/20 px-4 py-2 flex items-center justify-between text-xs transition-colors z-20">
+            <div className="bg-amber-50/90 dark:bg-amber-950/30 border-b border-amber-200/60 dark:border-amber-500/20 px-4 py-2 flex items-center justify-between text-xs transition-colors">
               <div className="flex items-center gap-2 overflow-hidden">
                 <Pin className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 fill-amber-500/20" />
                 <span className="font-semibold text-amber-800 dark:text-amber-300 shrink-0">
@@ -1119,8 +1036,8 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
             </div>
           )}
 
-          {/* Chat Messages Area - Only scrollable container */}
-          <div className="flex-1 min-h-0 p-4 overflow-y-auto bg-gray-50 dark:bg-[#121214] flex flex-col gap-4 overscroll-contain">
+          {/* Chat Messages Area */}
+          <div className="flex-1 p-4 overflow-y-auto bg-gray-50 dark:bg-[#121214] flex flex-col gap-4">
             {/* Tracking banner (Only if contact has package) */}
             {currentContact.package && (
               <div className="bg-white dark:bg-[#1c1c20] rounded-xl p-3 flex items-center justify-between border border-gray-100 dark:border-white/5 shadow-2xs">
@@ -1405,100 +1322,102 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
             <div ref={chatBottomRef} />
           </div>
 
-          {/* Bottom Fixed Area: Quick replies + Editing Indicator + Input Bar - Non-scrolling pinned at bottom */}
-          <div className="shrink-0 flex flex-col bg-white dark:bg-[#161618] border-t border-gray-100 dark:border-white/5 z-20">
-            {/* Quick reply suggestion pills */}
-            {!isRecording && (
-              <div className="px-4 pt-2.5 pb-1">
-                <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-                  {[
-                    "I'm on my way",
-                    "I have arrived at your gate",
-                    "Please have confirmation code ready",
-                    "Package delivered safely ✅",
-                  ].map((phrase, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleQuickSuggestion(phrase)}
-                      className="px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/10 hover:border-yellow-400 dark:hover:border-yellow-400 text-xs whitespace-nowrap text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white hover:bg-yellow-50/50 dark:hover:bg-yellow-400/10 transition-all cursor-pointer shrink-0"
-                    >
-                      {phrase}
-                    </button>
-                  ))}
-                </div>
+          {/* Quick reply suggestion pills */}
+          {!isRecording && (
+            <div className="px-4 pt-2.5 pb-1 bg-white dark:bg-[#161618] border-t border-gray-100 dark:border-white/5">
+              <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+                {[
+                  "I'm on my way",
+                  "I have arrived at your gate",
+                  "Please have confirmation code ready",
+                  "Package delivered safely ✅",
+                ].map((phrase, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleQuickSuggestion(phrase)}
+                    className="px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/10 hover:border-yellow-400 dark:hover:border-yellow-400 text-xs whitespace-nowrap text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white hover:bg-yellow-50/50 dark:hover:bg-yellow-400/10 transition-all cursor-pointer shrink-0"
+                  >
+                    {phrase}
+                  </button>
+                ))}
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Editing message indicator */}
-            {editingMessageId && (
-              <div className="px-4 py-2 bg-yellow-50 dark:bg-yellow-950/20 border-b border-yellow-200/80 dark:border-yellow-400/20 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-300 font-medium">
-                  <Pencil className="w-3.5 h-3.5" />
-                  <span>Editing message</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCancelEdit}
-                  className="text-gray-500 hover:text-gray-800 dark:hover:text-white p-1 cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+          {/* Editing message indicator */}
+          {editingMessageId && (
+            <div className="px-4 py-2 bg-yellow-50 dark:bg-yellow-950/20 border-t border-yellow-200/80 dark:border-yellow-400/20 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-300 font-medium">
+                <Pencil className="w-3.5 h-3.5" />
+                <span>Editing message</span>
               </div>
-            )}
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="text-gray-500 hover:text-gray-800 dark:hover:text-white p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
-            {/* Bottom Input Area / WhatsApp Voice Note Recorder & Attachments */}
-            <div className="p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
-              {/* Hidden file pickers */}
-              <input
-                type="file"
-                ref={imageInputRef}
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageUpload}
-              />
-              <input
-                type="file"
-                ref={fileInputRef}
-                accept="*/*"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
+          {/* Bottom Input Area / WhatsApp Voice Note Recorder & Attachments */}
+          <div className="p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] bg-white dark:bg-[#161618] border-t border-gray-100 dark:border-white/5">
+            {/* Hidden file pickers */}
+            <input
+              type="file"
+              ref={imageInputRef}
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageUpload}
+            />
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="*/*"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
 
             {isRecording ? (
-              <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm dark:border-white/10 dark:bg-[#202024] animate-in fade-in duration-200">
+              /* WhatsApp Voice Recording State Bar */
+              <div className="flex items-center justify-between gap-3 bg-red-50/70 dark:bg-red-950/20 border border-red-200/80 dark:border-red-500/20 rounded-full px-3.5 py-2 animate-in fade-in zoom-in-95 duration-200">
+                {/* Cancel / Trash Button */}
                 <button
                   type="button"
                   onClick={cancelVoiceRecording}
-                  className="w-9 h-9 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/10 transition-colors cursor-pointer shrink-0 active:scale-95"
-                  title="Cancel recording"
-                  aria-label="Cancel recording"
+                  className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 dark:text-red-400 transition-colors cursor-pointer shrink-0 active:scale-95"
+                  title="Discard voice note"
                 >
-                  <X className="w-5 h-5 stroke-[2]" />
+                  <Trash2 className="w-5 h-5 stroke-[2]" />
                 </button>
 
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-gray-200">
-                      <span className="h-2 w-2 rounded-full bg-red-500" />
-                      Recording voice message
-                    </span>
-                    <span className="font-mono text-xs font-medium text-gray-600 dark:text-gray-300">
-                      {formatAudioDuration(recordingSeconds)}
-                    </span>
-                  </div>
-                  <div
-                    role="progressbar"
-                    aria-label="Recording in progress"
-                    className="h-1 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10"
-                  >
-                    <div
-                      className="h-full rounded-full bg-red-500 transition-[width] duration-1000"
+                {/* Blinking Red Recording Indicator & Duration */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                  </span>
+                  <span className="font-mono text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400 min-w-[36px]">
+                    {formatAudioDuration(recordingSeconds)}
+                  </span>
+                </div>
+
+                {/* Animated WhatsApp Live Sound Waves */}
+                <div className="flex-1 flex items-center justify-center gap-1 px-2 h-7 overflow-hidden">
+                  {[
+                    4, 10, 16, 22, 12, 18, 26, 14, 8, 20, 24, 15, 11, 19, 13, 7,
+                  ].map((height, i) => (
+                    <span
+                      key={i}
+                      className="w-1 bg-red-500 dark:bg-red-400 rounded-full transition-all duration-150 ease-in-out"
                       style={{
-                        width: `${Math.min(100, (recordingSeconds / 60) * 100)}%`,
+                        height: `${Math.max(4, (height * ((recordingSeconds % 3) + 1.2)) % 26)}px`,
+                        opacity: 0.5 + (i % 3) * 0.2,
                       }}
                     />
-                  </div>
+                  ))}
                 </div>
 
                 {/* Stop and Send Button */}
@@ -1507,7 +1426,6 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
                   onClick={sendVoiceRecording}
                   className="w-10 h-10 flex items-center justify-center bg-yellow-400 hover:bg-yellow-500 text-black rounded-full shrink-0 shadow-md transition-all active:scale-90 cursor-pointer"
                   title="Send voice note"
-                  aria-label="Finish and send voice message"
                 >
                   <Send className="w-5 h-5 stroke-[2.2] ml-0.5" />
                 </button>
@@ -1579,7 +1497,6 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
                 )}
               </div>
             )}
-            </div>
           </div>
 
           {/* WhatsApp-Style Message Context Menu & Reaction Modal Overlay */}
@@ -1725,6 +1642,14 @@ export function MessagesPage({ initialChatId, onChatOpenChange }: MessagesProps 
                     <Pencil className="w-4 h-4 text-gray-500 dark:text-gray-400 stroke-[2]" />
                   </button>
 
+                  <button
+                    type="button"
+                    onClick={handleDeleteMessage}
+                    className="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 active:bg-red-100 dark:active:bg-red-950/40 cursor-pointer transition-colors touch-manipulation"
+                  >
+                    <span>Delete</span>
+                    <Trash2 className="w-4 h-4 text-red-500 stroke-[2]" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -2109,9 +2034,35 @@ function WhatsAppVoiceNote({
 }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
-  const [actualDuration, setActualDuration] = useState(0)
-  const [playbackError, setPlaybackError] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Initialize or update audio element
+  useEffect(() => {
+    const audio = new Audio(audioUrl)
+    audioRef.current = audio
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime)
+    }
+
+    const handleEnded = () => {
+      setIsPlaying(false)
+      setCurrentTime(0)
+      if (currentPlayingId === messageId) {
+        setCurrentPlayingId(null)
+      }
+    }
+
+    audio.addEventListener("timeupdate", handleTimeUpdate)
+    audio.addEventListener("ended", handleEnded)
+
+    return () => {
+      audio.removeEventListener("timeupdate", handleTimeUpdate)
+      audio.removeEventListener("ended", handleEnded)
+      audio.pause()
+      audio.src = ""
+    }
+  }, [audioUrl, messageId, currentPlayingId, setCurrentPlayingId])
 
   // Pause if another audio note starts playing
   useEffect(() => {
@@ -2129,18 +2080,36 @@ function WhatsAppVoiceNote({
       setIsPlaying(false)
       setCurrentPlayingId(null)
     } else {
-      if (audioRef.current.ended) audioRef.current.currentTime = 0
-      setPlaybackError(false)
       setCurrentPlayingId(messageId)
       audioRef.current
         .play()
-        .catch((error) => {
-          console.error("Voice note playback failed:", error)
-          setPlaybackError(true)
-          setCurrentPlayingId(null)
+        .then(() => {
+          setIsPlaying(true)
         })
+        .catch(() => {})
     }
   }
+
+  // Scrub waveform on click
+  const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const clickX = e.clientX - rect.left
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width))
+    const targetTime = percentage * (duration || 1)
+
+    audioRef.current.currentTime = targetTime
+    setCurrentTime(targetTime)
+    if (!isPlaying) {
+      setCurrentPlayingId(messageId)
+      audioRef.current
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => {})
+    }
+  }
+
+  const progressPercent = duration > 0 ? currentTime / duration : 0
 
   return (
     <div
@@ -2155,19 +2124,12 @@ function WhatsAppVoiceNote({
         <button
           type="button"
           onClick={togglePlay}
-          disabled={!audioUrl}
           className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-transform active:scale-90 cursor-pointer shadow-xs ${
             isUser
               ? "bg-gray-950 text-white hover:bg-gray-900"
               : "bg-yellow-400 text-gray-950 hover:bg-yellow-500"
           }`}
-          title={
-            audioUrl
-              ? isPlaying
-                ? "Pause voice note"
-                : "Play voice note"
-              : "Voice note unavailable"
-          }
+          title={isPlaying ? "Pause voice note" : "Play voice note"}
         >
           {isPlaying ? (
             <Pause className="w-4 h-4 fill-current" />
@@ -2176,79 +2138,33 @@ function WhatsAppVoiceNote({
           )}
         </button>
 
-        <audio
-          ref={audioRef}
-          src={audioUrl}
-          preload="metadata"
-          onLoadedMetadata={(event) => {
-            const loadedDuration = event.currentTarget.duration
-            if (Number.isFinite(loadedDuration) && loadedDuration > 0) {
-              setActualDuration(loadedDuration)
-            }
-          }}
-          onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
-          onEnded={() => {
-            setIsPlaying(false)
-            setCurrentTime(0)
-            setCurrentPlayingId(null)
-          }}
-          onError={() => {
-            setIsPlaying(false)
-            console.error("Voice note audio could not be loaded.")
-          }}
-          className="hidden"
-        />
-        {/* Audio playback progress */}
+        {/* WhatsApp Audio Waveform Bar */}
         <div className="flex-1 flex flex-col justify-center">
-          <div className="relative flex h-5 w-full items-center">
-            <div
-              className={`h-1.5 w-full overflow-hidden rounded-full ${
-                isUser ? "bg-gray-950/20" : "bg-gray-300 dark:bg-white/20"
-              }`}
-            >
-              <div
-                className={`h-full rounded-full ${
-                  isUser ? "bg-gray-950" : "bg-yellow-500"
-                }`}
-                style={{
-                  width: `${Math.min(
-                    100,
-                    (currentTime / (actualDuration || duration || 1)) * 100,
-                  )}%`,
-                }}
-              />
-            </div>
-            <span
-              aria-hidden="true"
-              className={`pointer-events-none absolute h-3 w-3 -translate-x-1/2 rounded-full border-2 ${
-                isUser
-                  ? "border-gray-950 bg-yellow-400"
-                  : "border-yellow-600 bg-white dark:bg-gray-100"
-              }`}
-              style={{
-                left: `${Math.min(
-                  100,
-                  (currentTime / (actualDuration || duration || 1)) * 100,
-                )}%`,
-              }}
-            />
-            <input
-              type="range"
-              min={0}
-              max={actualDuration || duration || 1}
-              step={0.1}
-              value={Math.min(currentTime, actualDuration || duration || 1)}
-              onChange={(event) => {
-                const nextTime = Number(event.target.value)
-                if (audioRef.current) audioRef.current.currentTime = nextTime
-                setCurrentTime(nextTime)
-              }}
-              aria-label="Voice note playback progress"
-              disabled={playbackError}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-            />
+          <div
+            onClick={handleWaveformClick}
+            className="flex items-center gap-0.5 sm:gap-1 h-7 cursor-pointer py-1 group"
+            title="Click to seek"
+          >
+            {WAVEFORM_BAR_HEIGHTS.map((h, index) => {
+              const barFraction = index / WAVEFORM_BAR_HEIGHTS.length
+              const isPlayed = barFraction <= progressPercent
+
+              return (
+                <span
+                  key={index}
+                  className={`w-1 rounded-full transition-colors duration-100 ${
+                    isUser
+                      ? isPlayed
+                        ? "bg-gray-950"
+                        : "bg-gray-950/30"
+                      : isPlayed
+                        ? "bg-yellow-500 dark:bg-yellow-400"
+                        : "bg-gray-300 dark:bg-white/20"
+                  }`}
+                  style={{ height: `${h}px` }}
+                />
+              )
+            })}
           </div>
 
           {/* Time & Read status row */}
@@ -2258,13 +2174,7 @@ function WhatsAppVoiceNote({
                 isUser ? "text-gray-800" : "text-gray-500 dark:text-gray-400"
               }`}
             >
-              {playbackError
-                ? "Audio unavailable"
-                : formatAudioDuration(
-                    isPlaying || currentTime > 0
-                      ? currentTime
-                      : actualDuration || duration,
-                  )}
+              {formatAudioDuration(isPlaying ? currentTime : duration)}
             </span>
             <div className="flex items-center gap-1.5">
               <span

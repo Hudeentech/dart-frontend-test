@@ -80,4 +80,6 @@ export const chatApi = {
     apiClient.patch<ChatMessage>(`chats/${id}/messages/${messageId}`, { text }),
   editMessage: (id: string, messageId: string, text: string) =>
     apiClient.patch<ChatMessage>(`chats/${id}/messages/${messageId}`, { text }),
+  deleteMessage: (id: string, messageId: string) =>
+    apiClient.delete<{ success: boolean }>(`chats/${id}/messages/${messageId}`),
 }

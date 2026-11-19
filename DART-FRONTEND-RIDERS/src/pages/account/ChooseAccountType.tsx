@@ -1,5 +1,6 @@
 import React, { useState } from "react"
 import { ArrowLeft, ChevronRight, Check, Loader2, User, Bike, Building2 } from "lucide-react"
+import { getCustomerAppUrl } from "../../utils/account-switch"
 
 export interface ChooseAccountTypeProps {
   onBack?: () => void
@@ -48,33 +49,16 @@ export default function ChooseAccountType({
     setIsSwitching(true)
     setSwitchingTarget(selectedType)
 
-    const isLocal =
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1"
-
     if (selectedType === "customer") {
-      let token = ""
-      let refresh = ""
       try {
-        token = localStorage.getItem("dart_rider_access_token") || localStorage.getItem("dart_access_token") || ""
-        refresh = localStorage.getItem("dart_rider_refresh_token") || localStorage.getItem("dart_refresh_token") || ""
-        if (token) localStorage.setItem("dart_access_token", token)
-        if (refresh) localStorage.setItem("dart_refresh_token", refresh)
-        const user = localStorage.getItem("dart_rider_user")
-        if (user) localStorage.setItem("dart_user", user)
-      } catch (err) {
-        console.warn("[ChooseAccountType] Token transfer note:", err)
+        const destination = getCustomerAppUrl()
+        window.setTimeout(() => window.location.assign(destination), 650)
+      } catch (error) {
+        console.error("[ChooseAccountType] Could not switch to customer app:", error)
+        setIsSwitching(false)
+        setSwitchingTarget(null)
+        setNotice("Could not switch accounts. Please try again.")
       }
-
-      const targetBase = isLocal ? "http://localhost:8443" : "/"
-      const ssoQuery = token
-        ? `?sso_token=${encodeURIComponent(token)}&sso_refresh=${encodeURIComponent(refresh)}`
-        : ""
-      const destination = `${targetBase}${ssoQuery}`
-
-      setTimeout(() => {
-        window.location.href = destination
-      }, 1000)
     } else {
       // Stay on rider
       setTimeout(() => {

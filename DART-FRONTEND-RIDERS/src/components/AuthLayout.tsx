@@ -105,7 +105,7 @@ export function AuthLayout({
   return (
     <div className="min-h-[100dvh] w-full flex flex-col xl:h-[100dvh] xl:min-h-0 xl:flex-row bg-[#fcfcfc] dark:bg-[#0c0c0e] text-gray-900 dark:text-white transition-colors overflow-hidden">
       {/* Left Column: Visual Carousel Panel (Desktop only - hidden on mobile and tablet) */}
-      <div className="hidden xl:flex xl:h-full xl:w-1/2 2xl:w-[60%] relative overflow-hidden bg-gray-950 flex-col justify-between p-8 lg:p-12 shrink-0 select-none">
+      <div className="hidden xl:flex xl:h-full xl:w-1/2 2xl:w-[50%] relative overflow-hidden bg-gray-950 flex-col justify-between p-8 lg:p-12 shrink-0 select-none">
         {/* Background Carousel Images with Smooth Cross-fade */}
         {SLIDES.map((slide, index) => (
           <div
@@ -117,7 +117,7 @@ export function AuthLayout({
             <img
               src={slide.image}
               alt={slide.title}
-              className="w-full h-full object-contain"
+              className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
           </div>

@@ -9,6 +9,7 @@ import {
   Camera,
   Mic,
   Send,
+  Trash2,
   Play,
   Pause,
   CheckCheck,
@@ -33,13 +34,11 @@ import RateRiderModal from "../components/RateRiderModal"
 import { chatApi, getChatSocket } from "../api"
 import { ordersApi } from "../api/orders.api"
 import { ApiChatContact, Order } from "../types/api.types"
-import { useAuth } from "../context/AuthContext"
 
 type Tab = "All" | "Conversation" | "Updates" | "Supports"
 
 interface ChatMessage {
   id: string
-  clientMessageId?: string
   sender: "user" | "other"
   type: "text" | "audio"
   text?: string
@@ -68,45 +67,14 @@ interface ChatContact {
   unreadCount?: number
 }
 
+// Fixed soundwave bar heights for WhatsApp-style audio rendering
+const WAVEFORM_BAR_HEIGHTS = [
+  6, 12, 18, 10, 16, 22, 14, 26, 18, 10, 20, 14, 8, 16, 24, 18, 12, 20, 15, 8,
+  14, 22, 16, 10, 6, 12,
+]
+
 // Emojis matching user's screenshot
 const REACTION_EMOJIS = ["👍", "🙂", "😊", "😒", "💖", "😄", "🙃", "👌"]
-const createClientMessageId = () =>
-  globalThis.crypto?.randomUUID?.() ||
-  `message-${Date.now()}-${Math.random().toString(36).slice(2)}`
-
-const upsertMessage = (
-  messages: ChatMessage[],
-  message: ChatMessage,
-  clientMessageId?: string,
-): ChatMessage[] => {
-  const index = messages.findIndex(
-    (item) =>
-      item.id === message.id ||
-      (!!clientMessageId && item.clientMessageId === clientMessageId),
-  )
-  const updated =
-    index < 0
-      ? [...messages, message]
-      : messages.map((item, itemIndex) =>
-          itemIndex === index ? { ...item, ...message } : item,
-        )
-  const seenIds = new Set<string>()
-  return updated.filter((item) => {
-    if (seenIds.has(item.id)) return false
-    seenIds.add(item.id)
-    return true
-  })
-}
-
-const mergeMessages = (
-  current: ChatMessage[],
-  incoming: ChatMessage[],
-): ChatMessage[] =>
-  incoming.reduce(
-    (messages, message) =>
-      upsertMessage(messages, message, message.clientMessageId),
-    current,
-  )
 const EXTRA_REACTION_EMOJIS = [
   "❤️",
   "🔥",
@@ -136,7 +104,6 @@ export interface MessagesProps {
 }
 
 export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
-  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>("All")
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
   const [searchQuery, setSearchQuery] = useState<string>("")
@@ -193,8 +160,6 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
 
   // Text input & voice recording state
   const [inputText, setInputText] = useState("")
-  const [isSendingMessage, setIsSendingMessage] = useState(false)
-  const isSendingMessageRef = useRef(false)
   const [isRecording, setIsRecording] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [currentlyPlayingAudioId, setCurrentlyPlayingAudioId] =
@@ -249,12 +214,9 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
         if (msgs && Array.isArray(msgs) && msgs.length > 0) {
           const formatted: ChatMessage[] = msgs.map((m) => ({
             id: m.id,
-            clientMessageId: m.clientMessageId,
             sender:
-              (m.senderId && m.senderId === user?.id
-                ? "user"
-                : (m.sender as "user" | "other") ||
-                  (m.senderRole === "user" ? "user" : "other")),
+              (m.sender as "user" | "other") ||
+              (m.senderRole === "user" ? "user" : "other"),
             type: m.type === "audio" ? "audio" : "text",
             text: m.text,
             audioUrl: m.audioUrl,
@@ -273,7 +235,7 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
           }))
           setMessagesByChat((prev) => ({
             ...prev,
-            [activeChat]: mergeMessages(prev[activeChat] || [], formatted),
+            [activeChat]: formatted,
           }))
           setTimeout(scrollToBottom, 50)
         }
@@ -289,14 +251,12 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
     const handleNewMessage = (msg: any) => {
       if (msg.chatId === activeChat) {
         setMessagesByChat((prev) => {
+          const existing = prev[activeChat] || []
+          if (existing.some((m) => m.id === msg.id)) return prev
           const formatted: ChatMessage = {
             id: msg.id,
-            clientMessageId: msg.clientMessageId,
             sender:
-              (msg.senderId && msg.senderId === user?.id
-                ? "user"
-                : msg.sender ||
-                  (msg.senderRole === "user" ? "user" : "other")),
+              msg.sender || (msg.senderRole === "user" ? "user" : "other"),
             type: msg.type || "text",
             text: msg.text,
             audioUrl: msg.audioUrl,
@@ -313,29 +273,24 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
           }
           return {
             ...prev,
-            [activeChat]: upsertMessage(
-              prev[activeChat] || [],
-              formatted,
-              msg.clientMessageId,
-            ),
+            [activeChat]: [...existing, formatted],
           }
         })
         setTimeout(scrollToBottom, 50)
       }
     }
 
-    const handleMessageReacted = ({ messageId, emoji, reactions }: any) => {
+    const handleMessageReacted = ({ messageId, emoji }: any) => {
       setMessagesByChat((prev) => {
         const list = prev[activeChat] || []
         return {
           ...prev,
           [activeChat]: list.map((m) => {
             if (m.id !== messageId) return m
-            if (Array.isArray(reactions)) return { ...m, reactions }
-            const currentReactions = m.reactions || []
-            const updated = currentReactions.includes(emoji)
-              ? currentReactions.filter((r) => r !== emoji)
-              : [...currentReactions, emoji]
+            const reactions = m.reactions || []
+            const updated = reactions.includes(emoji)
+              ? reactions.filter((r) => r !== emoji)
+              : [...reactions, emoji]
             return { ...m, reactions: updated }
           }),
         }
@@ -381,7 +336,7 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
       socket.off("message_edited", handleMessageEdited)
       socket.off("message_deleted", handleMessageDeleted)
     }
-  }, [activeChat, scrollToBottom, user?.id])
+  }, [activeChat, scrollToBottom])
 
   // Clean up recording timer and audio tracks on unmount
   useEffect(() => {
@@ -402,56 +357,27 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
     if (editingMessageId) {
       const trimmed = inputText.trim()
       if (!trimmed) return
-      const chatId = activeChat
-      const messageId = editingMessageId
-      const originalMessage = messagesByChat[chatId]?.find(
-        (message) => message.id === messageId,
-      )
-      const originalText =
-        originalMessage?.text ?? editingText
+      chatApi.editMessage(activeChat, editingMessageId, trimmed).catch(() => {})
       setMessagesByChat((prev) => ({
         ...prev,
-        [chatId]: (prev[chatId] || []).map((m) =>
-          m.id === messageId
+        [activeChat]: (prev[activeChat] || []).map((m) =>
+          m.id === editingMessageId
             ? { ...m, text: trimmed, isEdited: true }
             : m,
         ),
       }))
       setEditingMessageId(null)
-      setEditingText("")
       setInputText("")
-      chatApi
-        .editMessage(chatId, messageId, trimmed)
-        .then(() => showToast("Message edited"))
-        .catch((err) => {
-          console.warn("Failed to edit message:", err)
-          setMessagesByChat((prev) => ({
-            ...prev,
-            [chatId]: (prev[chatId] || []).map((message) =>
-              message.id === messageId
-                ? {
-                    ...message,
-                    text: originalText,
-                    isEdited: originalMessage?.isEdited,
-                  }
-                : message,
-            ),
-          }))
-          showToast("Message could not be edited. Please try again.")
-        })
+      showToast("Message edited")
       return
     }
 
     const textToSend = inputText.trim()
     if (!textToSend) return
-    if (isSendingMessageRef.current) return
-    isSendingMessageRef.current = true
-    setIsSendingMessage(true)
 
-    const tempId = createClientMessageId()
+    const tempId = `msg-${Date.now()}`
     const newMessage: ChatMessage = {
       id: tempId,
-      clientMessageId: tempId,
       sender: "user",
       type: "text",
       text: textToSend,
@@ -467,22 +393,12 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
     setTimeout(scrollToBottom, 50)
 
     chatApi
-      .sendMessage(activeChat, {
-        type: "text",
-        text: textToSend,
-        clientMessageId: tempId,
-      })
+      .sendMessage(activeChat, { type: "text", text: textToSend })
       .then((saved) => {
         setMessagesByChat((prev) => ({
           ...prev,
-          [activeChat]: upsertMessage(
-            prev[activeChat] || [],
-            {
-              ...newMessage,
-              id: saved.id,
-              time: saved.time || newMessage.time,
-            },
-            tempId,
+          [activeChat]: (prev[activeChat] || []).map((m) =>
+            m.id === tempId ? { ...m, id: saved.id, time: saved.time || m.time } : m,
           ),
         }))
       })
@@ -494,22 +410,14 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
         }))
         showToast("Message could not be sent. Please try again.")
       })
-      .finally(() => {
-        isSendingMessageRef.current = false
-        setIsSendingMessage(false)
-      })
   }
 
   // Quick suggestion click
   const handleQuickSuggestion = (text: string) => {
     if (!activeChat) return
-    if (isSendingMessageRef.current) return
-    isSendingMessageRef.current = true
-    setIsSendingMessage(true)
-    const tempId = createClientMessageId()
+    const tempId = `msg-${Date.now()}`
     const newMessage: ChatMessage = {
       id: tempId,
-      clientMessageId: tempId,
       sender: "user",
       type: "text",
       text,
@@ -524,18 +432,12 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
     setTimeout(scrollToBottom, 50)
 
     chatApi
-      .sendMessage(activeChat, { type: "text", text, clientMessageId: tempId })
+      .sendMessage(activeChat, { type: "text", text })
       .then((saved) => {
         setMessagesByChat((prev) => ({
           ...prev,
-          [activeChat]: upsertMessage(
-            prev[activeChat] || [],
-            {
-              ...newMessage,
-              id: saved.id,
-              time: saved.time || newMessage.time,
-            },
-            tempId,
+          [activeChat]: (prev[activeChat] || []).map((m) =>
+            m.id === tempId ? { ...m, id: saved.id, time: saved.time || m.time } : m,
           ),
         }))
       })
@@ -546,10 +448,6 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
           [activeChat]: (prev[activeChat] || []).filter((m) => m.id !== tempId),
         }))
         showToast("Message could not be sent. Please try again.")
-      })
-      .finally(() => {
-        isSendingMessageRef.current = false
-        setIsSendingMessage(false)
       })
   }
 
@@ -644,10 +542,9 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
     }
 
     const finalizeAndSend = (audioUrl: string) => {
-      const tempId = createClientMessageId()
+      const tempId = `vn-${Date.now()}`
       const newVoiceMessage: ChatMessage = {
         id: tempId,
-        clientMessageId: tempId,
         sender: "user",
         type: "audio",
         audioUrl,
@@ -670,15 +567,12 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
           type: "audio",
           audioUrl,
           audioDuration: duration,
-          clientMessageId: tempId,
         })
         .then((saved) => {
           setMessagesByChat((prev) => ({
             ...prev,
-            [activeChat]: upsertMessage(
-              prev[activeChat] || [],
-              { ...newVoiceMessage, id: saved.id },
-              tempId,
+            [activeChat]: (prev[activeChat] || []).map((m) =>
+              m.id === tempId ? { ...m, id: saved.id } : m,
             ),
           }))
         })
@@ -706,21 +600,8 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
         if (audioChunksRef.current.length > 0) {
           const mimeType = mediaRecorderRef.current?.mimeType || "audio/webm"
           const blob = new Blob(audioChunksRef.current, { type: mimeType })
-          const reader = new FileReader()
-          reader.onloadend = () => {
-            if (typeof reader.result === "string") {
-              finalizeAndSend(reader.result)
-            } else {
-              showToast("Voice message could not be prepared. Please try again.")
-              setIsRecording(false)
-            }
-          }
-          reader.onerror = () => {
-            console.error("Failed to read recorded voice message:", reader.error)
-            showToast("Voice message could not be prepared. Please try again.")
-            setIsRecording(false)
-          }
-          reader.readAsDataURL(blob)
+          const audioUrl = URL.createObjectURL(blob)
+          finalizeAndSend(audioUrl)
         } else {
           const fallbackUrl = generateVoiceNoteFallbackBlob(duration)
           finalizeAndSend(fallbackUrl)
@@ -810,25 +691,22 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
   // Pin / Unpin message
   const handleTogglePinMessage = () => {
     if (!selectedMessageForMenu || !activeChat) return
-    const chatId = activeChat
-    const messageId = selectedMessageForMenu.id
     const willPin = !selectedMessageForMenu.isPinned
 
-    const updatePinnedState = (isPinned: boolean) => {
-      setMessagesByChat((prev) => ({
-        ...prev,
-        [chatId]: (prev[chatId] || []).map((msg) =>
-          msg.id === messageId ? { ...msg, isPinned } : msg,
-        ),
-      }))
-    }
-
-    updatePinnedState(willPin)
-    chatApi.pinMessage(chatId, messageId, willPin).catch((err) => {
+    chatApi
+      .pinMessage(activeChat, selectedMessageForMenu.id, willPin)
+      .catch((err) => {
         console.warn("Failed to pin message via API:", err)
-        updatePinnedState(!willPin)
-        showToast("Message could not be updated. Please try again.")
       })
+
+    setMessagesByChat((prev) => ({
+      ...prev,
+      [activeChat]: (prev[activeChat] || []).map((msg) =>
+        msg.id === selectedMessageForMenu.id
+          ? { ...msg, isPinned: willPin }
+          : msg,
+      ),
+    }))
 
     handleCloseContextMenu()
     showToast(willPin ? "Message pinned" : "Message unpinned")
@@ -854,6 +732,27 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
     setEditingMessageId(null)
     setEditingText("")
     setInputText("")
+  }
+
+  // Delete message
+  const handleDeleteMessage = () => {
+    if (!selectedMessageForMenu || !activeChat) return
+
+    chatApi
+      .deleteMessage(activeChat, selectedMessageForMenu.id)
+      .catch((err) => {
+        console.warn("Failed to delete message via API:", err)
+      })
+
+    setMessagesByChat((prev) => ({
+      ...prev,
+      [activeChat]: (prev[activeChat] || []).filter(
+        (msg) => msg.id !== selectedMessageForMenu.id,
+      ),
+    }))
+
+    handleCloseContextMenu()
+    showToast("Message deleted")
   }
 
   // Long press touch handlers
@@ -921,9 +820,7 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
 
     return null
   }, [activeChat, contacts, activeDeliveries])
-  const currentMessages = activeChat
-    ? mergeMessages([], messagesByChat[activeChat] || [])
-    : []
+  const currentMessages = activeChat ? messagesByChat[activeChat] || [] : []
   const pinnedMessage = currentMessages.find((m) => m.isPinned)
 
   // Active Chat Screen
@@ -1006,28 +903,14 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
                 </span>
               </div>
               <button
-                type="button"
                 onClick={() => {
-                  if (!activeChat) return
-                  const chatId = activeChat
-                  const messageId = pinnedMessage.id
                   setMessagesByChat((prev) => ({
                     ...prev,
-                    [chatId]: (prev[chatId] || []).map((m) =>
-                      m.id === messageId ? { ...m, isPinned: false } : m,
+                    [activeChat]: (prev[activeChat] || []).map((m) =>
+                      m.id === pinnedMessage.id ? { ...m, isPinned: false } : m,
                     ),
                   }))
                   showToast("Message unpinned")
-                  chatApi.pinMessage(chatId, messageId, false).catch((err) => {
-                    console.warn("Failed to unpin message via API:", err)
-                    setMessagesByChat((prev) => ({
-                      ...prev,
-                      [chatId]: (prev[chatId] || []).map((m) =>
-                        m.id === messageId ? { ...m, isPinned: true } : m,
-                      ),
-                    }))
-                    showToast("Message could not be updated. Please try again.")
-                  })
                 }}
                 className="text-amber-700 dark:text-amber-400 hover:text-amber-900 text-[11px] font-medium ml-2 shrink-0 cursor-pointer"
               >
@@ -1247,47 +1130,51 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
           {/* Bottom Input Area / WhatsApp Voice Note Recorder */}
           <div className="p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] bg-white dark:bg-[#161618] border-t border-gray-100 dark:border-white/5">
             {isRecording ? (
-              <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm dark:border-white/10 dark:bg-[#202024] animate-in fade-in duration-200">
+              /* WhatsApp Voice Recording State Bar */
+              <div className="flex items-center justify-between gap-3 bg-red-50/70 dark:bg-red-950/20 border border-red-200/80 dark:border-red-500/20 rounded-full px-3.5 py-2 animate-in fade-in zoom-in-95 duration-200">
+                {/* Cancel / Trash Button */}
                 <button
                   type="button"
                   onClick={cancelVoiceRecording}
-                  className="w-9 h-9 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/10 transition-colors cursor-pointer shrink-0 active:scale-95"
-                  title="Cancel recording"
-                  aria-label="Cancel recording"
+                  className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 dark:text-red-400 transition-colors cursor-pointer shrink-0 active:scale-95"
+                  title="Discard voice note"
                 >
-                  <X className="w-5 h-5 stroke-[2]" />
+                  <Trash2 className="w-5 h-5 stroke-[2]" />
                 </button>
 
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-gray-200">
-                      <span className="h-2 w-2 rounded-full bg-red-500" />
-                      Recording voice message
-                    </span>
-                    <span className="font-mono text-xs font-medium text-gray-600 dark:text-gray-300">
-                      {formatAudioDuration(recordingSeconds)}
-                    </span>
-                  </div>
-                  <div
-                    role="progressbar"
-                    aria-label="Recording in progress"
-                    className="h-1 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10"
-                  >
-                    <div
-                      className="h-full rounded-full bg-red-500 transition-[width] duration-1000"
-                      style={{
-                        width: `${Math.min(100, (recordingSeconds / 60) * 100)}%`,
-                      }}
-                    />
-                  </div>
+                {/* Blinking Red Recording Indicator & Duration */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                  </span>
+                  <span className="font-mono text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400 min-w-[36px]">
+                    {formatAudioDuration(recordingSeconds)}
+                  </span>
                 </div>
 
+                {/* Animated WhatsApp Live Sound Waves */}
+                <div className="flex-1 flex items-center justify-center gap-1 px-2 h-7 overflow-hidden">
+                  {[
+                    4, 10, 16, 22, 12, 18, 26, 14, 8, 20, 24, 15, 11, 19, 13, 7,
+                  ].map((height, i) => (
+                    <span
+                      key={i}
+                      className="w-1 bg-red-500 dark:bg-red-400 rounded-full transition-all duration-150 ease-in-out"
+                      style={{
+                        height: `${Math.max(4, (height * ((recordingSeconds % 3) + 1.2)) % 26)}px`,
+                        opacity: 0.5 + (i % 3) * 0.2,
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {/* Stop and Send Button */}
                 <button
                   type="button"
                   onClick={sendVoiceRecording}
-                  className="w-10 h-10 flex items-center justify-center bg-yellow-400 hover:bg-yellow-500 text-black rounded-full shrink-0 transition-all active:scale-90 cursor-pointer"
+                  className="w-10 h-10 flex items-center justify-center bg-yellow-400 hover:bg-yellow-500 text-black rounded-full shrink-0 shadow-md transition-all active:scale-90 cursor-pointer"
                   title="Send voice note"
-                  aria-label="Finish and send voice message"
                 >
                   <Send className="w-5 h-5 stroke-[2.2] ml-0.5" />
                 </button>
@@ -1328,9 +1215,7 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
                   <button
                     type="button"
                     onClick={handleSendText}
-                  disabled={isSendingMessage}
-                  aria-busy={isSendingMessage}
-                  className="w-10 h-10 flex items-center justify-center bg-yellow-400 hover:bg-yellow-500 text-black rounded-full flex-shrink-0 cursor-pointer transition-all duration-200 active:scale-95 shadow-sm animate-in zoom-in-75"
+                    className="w-10 h-10 flex items-center justify-center bg-yellow-400 hover:bg-yellow-500 text-black rounded-full flex-shrink-0 cursor-pointer transition-all duration-200 active:scale-95 shadow-sm animate-in zoom-in-75"
                     title={editingMessageId ? "Save edit" : "Send message"}
                   >
                     {editingMessageId ? (
@@ -1473,17 +1358,25 @@ export default function Messages({ onChatOpenChange }: MessagesProps = {}) {
                     />
                   </button>
 
-                  {selectedMessageForMenu.sender === "user" &&
-                    selectedMessageForMenu.type === "text" && (
-                      <button
-                        type="button"
-                        onClick={handleStartEditMessage}
-                        className="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 active:bg-gray-100 dark:active:bg-white/10 cursor-pointer transition-colors touch-manipulation"
-                      >
-                        <span>Edit</span>
-                        <Pencil className="w-4 h-4 text-gray-500 dark:text-gray-400 stroke-[2]" />
-                      </button>
-                    )}
+                  {/* Edit Row (Only for user text messages) */}
+                  <button
+                    type="button"
+                    onClick={handleStartEditMessage}
+                    className="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 active:bg-gray-100 dark:active:bg-white/10 cursor-pointer transition-colors touch-manipulation"
+                  >
+                    <span>Edit</span>
+                    <Pencil className="w-4 h-4 text-gray-500 dark:text-gray-400 stroke-[2]" />
+                  </button>
+
+                  {/* Delete Row */}
+                  <button
+                    type="button"
+                    onClick={handleDeleteMessage}
+                    className="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 active:bg-red-100 dark:active:bg-red-950/40 cursor-pointer transition-colors touch-manipulation"
+                  >
+                    <span>Delete</span>
+                    <Trash2 className="w-4 h-4 text-red-500 stroke-[2]" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -1805,9 +1698,35 @@ function WhatsAppVoiceNote({
 }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
-  const [actualDuration, setActualDuration] = useState(0)
-  const [playbackError, setPlaybackError] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Initialize or update audio element
+  useEffect(() => {
+    const audio = new Audio(audioUrl)
+    audioRef.current = audio
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime)
+    }
+
+    const handleEnded = () => {
+      setIsPlaying(false)
+      setCurrentTime(0)
+      if (currentPlayingId === messageId) {
+        setCurrentPlayingId(null)
+      }
+    }
+
+    audio.addEventListener("timeupdate", handleTimeUpdate)
+    audio.addEventListener("ended", handleEnded)
+
+    return () => {
+      audio.removeEventListener("timeupdate", handleTimeUpdate)
+      audio.removeEventListener("ended", handleEnded)
+      audio.pause()
+      audio.src = ""
+    }
+  }, [audioUrl, messageId, currentPlayingId, setCurrentPlayingId])
 
   // Pause if another audio note starts playing
   useEffect(() => {
@@ -1825,18 +1744,38 @@ function WhatsAppVoiceNote({
       setIsPlaying(false)
       setCurrentPlayingId(null)
     } else {
-      if (audioRef.current.ended) audioRef.current.currentTime = 0
-      setPlaybackError(false)
       setCurrentPlayingId(messageId)
       audioRef.current
         .play()
+        .then(() => {
+          setIsPlaying(true)
+        })
         .catch((err) => {
-          console.error("Voice message playback failed:", err)
-          setPlaybackError(true)
-          setCurrentPlayingId(null)
+          console.warn("Audio play prevented:", err)
         })
     }
   }
+
+  // Scrub waveform on click
+  const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const clickX = e.clientX - rect.left
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width))
+    const targetTime = percentage * (duration || 1)
+
+    audioRef.current.currentTime = targetTime
+    setCurrentTime(targetTime)
+    if (!isPlaying) {
+      setCurrentPlayingId(messageId)
+      audioRef.current
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(console.warn)
+    }
+  }
+
+  const progressPercent = duration > 0 ? currentTime / duration : 0
 
   return (
     <div
@@ -1851,19 +1790,12 @@ function WhatsAppVoiceNote({
         <button
           type="button"
           onClick={togglePlay}
-          disabled={!audioUrl}
           className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-transform active:scale-90 cursor-pointer shadow-xs ${
             isUser
               ? "bg-gray-950 text-white hover:bg-gray-900"
               : "bg-yellow-400 text-gray-950 hover:bg-yellow-500"
           }`}
-          title={
-            audioUrl
-              ? isPlaying
-                ? "Pause voice note"
-                : "Play voice note"
-              : "Voice note unavailable"
-          }
+          title={isPlaying ? "Pause voice note" : "Play voice note"}
         >
           {isPlaying ? (
             <Pause className="w-4 h-4 fill-current" />
@@ -1872,79 +1804,33 @@ function WhatsAppVoiceNote({
           )}
         </button>
 
-        <audio
-          ref={audioRef}
-          src={audioUrl}
-          preload="metadata"
-          onLoadedMetadata={(event) => {
-            const loadedDuration = event.currentTarget.duration
-            if (Number.isFinite(loadedDuration) && loadedDuration > 0) {
-              setActualDuration(loadedDuration)
-            }
-          }}
-          onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
-          onEnded={() => {
-            setIsPlaying(false)
-            setCurrentTime(0)
-            setCurrentPlayingId(null)
-          }}
-          onError={() => {
-            setIsPlaying(false)
-            console.error("Voice message audio could not be loaded.")
-          }}
-          className="hidden"
-        />
-        {/* Audio playback progress */}
+        {/* WhatsApp Audio Waveform Bar */}
         <div className="flex-1 flex flex-col justify-center">
-          <div className="relative flex h-5 w-full items-center">
-            <div
-              className={`h-1.5 w-full overflow-hidden rounded-full ${
-                isUser ? "bg-gray-950/20" : "bg-gray-300 dark:bg-white/20"
-              }`}
-            >
-              <div
-                className={`h-full rounded-full ${
-                  isUser ? "bg-gray-950" : "bg-yellow-500"
-                }`}
-                style={{
-                  width: `${Math.min(
-                    100,
-                    (currentTime / (actualDuration || duration || 1)) * 100,
-                  )}%`,
-                }}
-              />
-            </div>
-            <span
-              aria-hidden="true"
-              className={`pointer-events-none absolute h-3 w-3 -translate-x-1/2 rounded-full border-2 ${
-                isUser
-                  ? "border-gray-950 bg-yellow-400"
-                  : "border-yellow-600 bg-white dark:bg-gray-100"
-              }`}
-              style={{
-                left: `${Math.min(
-                  100,
-                  (currentTime / (actualDuration || duration || 1)) * 100,
-                )}%`,
-              }}
-            />
-            <input
-              type="range"
-              min={0}
-              max={actualDuration || duration || 1}
-              step={0.1}
-              value={Math.min(currentTime, actualDuration || duration || 1)}
-              onChange={(event) => {
-                const nextTime = Number(event.target.value)
-                if (audioRef.current) audioRef.current.currentTime = nextTime
-                setCurrentTime(nextTime)
-              }}
-              aria-label="Voice note playback progress"
-              disabled={playbackError}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-            />
+          <div
+            onClick={handleWaveformClick}
+            className="flex items-center gap-0.5 sm:gap-1 h-7 cursor-pointer py-1 group"
+            title="Click to seek"
+          >
+            {WAVEFORM_BAR_HEIGHTS.map((h, index) => {
+              const barFraction = index / WAVEFORM_BAR_HEIGHTS.length
+              const isPlayed = barFraction <= progressPercent
+
+              return (
+                <span
+                  key={index}
+                  className={`w-1 rounded-full transition-colors duration-100 ${
+                    isUser
+                      ? isPlayed
+                        ? "bg-gray-950"
+                        : "bg-gray-950/30"
+                      : isPlayed
+                        ? "bg-yellow-500 dark:bg-yellow-400"
+                        : "bg-gray-300 dark:bg-white/20"
+                  }`}
+                  style={{ height: `${h}px` }}
+                />
+              )
+            })}
           </div>
 
           {/* Time & Read status row */}
@@ -1954,13 +1840,7 @@ function WhatsAppVoiceNote({
                 isUser ? "text-gray-800" : "text-gray-500 dark:text-gray-400"
               }`}
             >
-              {playbackError
-                ? "Audio unavailable"
-                : formatAudioDuration(
-                    isPlaying || currentTime > 0
-                      ? currentTime
-                      : actualDuration || duration,
-                  )}
+              {formatAudioDuration(isPlaying ? currentTime : duration)}
             </span>
             <div className="flex items-center gap-1.5">
               <span
